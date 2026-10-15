@@ -1,0 +1,69 @@
+# Self-hosted Luma dashboard. First run: ./setup.sh
+services:
+  # Open-source Convex backend: database + realtime sync. Luma on the phone
+  # and the web dashboard both talk to this over WebSockets.
+  backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    restart: unless-stopped
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${BACKEND_PORT:-3210}:3210"
+    volumes:
+      - convex-data:/convex/data
+    environment:
+      INSTANCE_NAME: luma-dashboard
+      INSTANCE_SECRET: ${INSTANCE_SECRET:-}
+      CONVEX_CLOUD_ORIGIN: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
+      CONVEX_SITE_ORIGIN: ${PUBLIC_SITE_URL:-http://127.0.0.1:3211}
+      DISABLE_BEACON: "true"
+      DOCUMENT_RETENTION_DELAY: "172800"
+    healthcheck:
+      test: curl -f http://localhost:3210/version
+      interval: 5s
+      start_period: 10s
+
+  # Pushes the functions in convex/ to the backend on every `up`, then exits.
+  deploy:
+    build:
+      context: .
+      target: deploy
+    restart: "no"
+    environment:
+      CONVEX_SELF_HOSTED_URL: http://backend:3210
+      CONVEX_SELF_HOSTED_ADMIN_KEY: ${CONVEX_ADMIN_KEY:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # The web dashboard (static files served by nginx).
+  web:
+    build:
+      context: .
+      target: web
+    image: luma-dashboard-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    environment:
+      CONVEX_URL: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
+    depends_on:
+      deploy:
+        condition: service_completed_successfully
+
+  # Optional Convex admin UI for browsing data and editing releaseVersions:
+  #   docker compose --profile admin up -d convex-dashboard
+  convex-dashboard:
+    profiles: ["admin"]
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    restart: unless-stopped
+    ports:
+      - "${CONVEX_DASHBOARD_PORT:-6791}:6791"
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  convex-data:
