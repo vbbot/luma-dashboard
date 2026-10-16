@@ -35,11 +35,6 @@ button {
   color: inherit;
 }
 
-.fatal {
-  padding: 2rem;
-  text-align: center;
-}
-
 /* Layout ------------------------------------------------------------------ */
 
 .screen {

@@ -1,44 +1,42 @@
 # Self-hosted Luma dashboard.
-#   1. Set PUBLIC_BACKEND_URL in .env (see .env.example)
+#   1. Set PUBLIC_URL in .env (see .env.example)
 #   2. docker compose up -d
+# The dashboard and the backend share that one URL; enter it under Server in
+# Luma as well.
 # To build the images from source instead of pulling them:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 services:
-  # Convex backend with the dashboard functions. Luma on the phone and the
-  # web dashboard both connect to it.
+  # Convex backend with the dashboard functions. Not published: it is reached
+  # through the web container.
   backend:
     image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     stop_grace_period: 10s
     stop_signal: SIGINT
-    ports:
-      - "${BACKEND_PORT:-3210}:3210"
     volumes:
       - convex-data:/convex/data
     environment:
       # Optional. Generated and stored in the volume when unset.
       INSTANCE_SECRET: ${INSTANCE_SECRET:-}
-      CONVEX_CLOUD_ORIGIN: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
-      CONVEX_SITE_ORIGIN: ${PUBLIC_SITE_URL:-http://127.0.0.1:3211}
+      CONVEX_CLOUD_ORIGIN: ${PUBLIC_URL:-http://127.0.0.1:8080}
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/ready && curl -fs http://localhost:3210/version"]
       interval: 5s
       start_period: 60s
 
+  # The dashboard, plus a proxy to the backend on the same origin.
   web:
     image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-8080}:80"
-    environment:
-      CONVEX_URL: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
     depends_on:
       backend:
         condition: service_healthy
 
   # Optional Convex admin UI for browsing data:
   #   docker compose --profile admin up -d convex-admin
-  # Sign in with PUBLIC_BACKEND_URL and the key from:
+  # Sign in with PUBLIC_URL and the key from:
   #   docker compose exec backend admin-key
   convex-admin:
     profiles: ["admin"]

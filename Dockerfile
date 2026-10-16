@@ -14,7 +14,9 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.27-alpine AS web
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# host:port of the backend as seen from this container.
+ENV BACKEND_UPSTREAM=backend:3210
+COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/entrypoint.sh /docker-entrypoint.d/40-luma-config.sh
 RUN chmod +x /docker-entrypoint.d/40-luma-config.sh
 COPY --from=build /app/dist /usr/share/nginx/html
