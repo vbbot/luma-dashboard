@@ -82,6 +82,8 @@ export default defineSchema({
     refreshedAt: v.number(),
     appCount: v.number(),
     errors: v.array(v.string()),
+    // Last awesome-light app folders listed, for when GitHub's API refuses.
+    awesomeDirs: v.optional(v.array(v.string())),
   }),
 
   // appId -> latest version. The launcher reads the "luma" key to offer

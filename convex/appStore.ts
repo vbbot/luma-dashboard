@@ -53,16 +53,21 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
-async function fetchAwesomeLight() {
+// Lists awesome-light's app folders. Listing needs GitHub's API; the app
+// files themselves come from raw.githubusercontent.com, which is not limited.
+async function listAwesomeLightDirs(): Promise<string[]> {
   const tree = await fetch(
     `https://api.github.com/repos/${AWESOME_LIGHT_REPO}/git/trees/main?recursive=1`,
     { headers: githubHeaders() },
   );
-  if (!tree.ok) throw new Error(`awesome-light tree: HTTP ${tree.status}`);
+  if (!tree.ok) throw new Error(`awesome-light listing: HTTP ${tree.status}`);
   const paths = ((await tree.json()) as { tree: { path: string }[] }).tree.map((item) => item.path);
-  const dirs = paths
+  return paths
     .map((path) => /^content\/apps\/([^/]+)\/index\.md$/.exec(path)?.[1])
     .filter((dir): dir is string => dir !== undefined);
+}
+
+async function fetchAwesomeLight(dirs: string[]) {
   const apps = await mapLimit(dirs, 8, async (dir) => {
     const response = await fetch(
       `https://raw.githubusercontent.com/${AWESOME_LIGHT_REPO}/main/content/apps/${encodeURIComponent(dir)}/index.md`,
@@ -77,11 +82,26 @@ export const refresh = internalAction({
   handler: async (ctx) => {
     const errors: string[] = [];
 
+    const previous: { awesomeDirs?: string[] } | null = await ctx.runQuery(
+      internal.appStore.status,
+      {},
+    );
+    let awesomeDirs = previous?.awesomeDirs ?? [];
+    try {
+      awesomeDirs = await listAwesomeLightDirs();
+    } catch {
+      errors.push(
+        awesomeDirs.length > 0
+          ? "awesome-light: using the app list from the previous refresh (GitHub limit reached)"
+          : "awesome-light: skipped this refresh (GitHub limit reached)",
+      );
+    }
+
     let merged: StoreApp[];
     try {
       const index = await fetch(BRIGHT_MARKET_INDEX);
       if (!index.ok) throw new Error(`Bright Market: HTTP ${index.status}`);
-      merged = mergeSources(parseBrightMarket(await index.json()), await fetchAwesomeLight());
+      merged = mergeSources(parseBrightMarket(await index.json()), await fetchAwesomeLight(awesomeDirs));
     } catch (error) {
       // Keep the current catalog rather than replacing it with a partial one.
       const message = error instanceof Error ? error.message : String(error);
@@ -157,7 +177,13 @@ export const refresh = internalAction({
     });
 
     const apps = sortApps(dedupeByPackage(merged));
-    await ctx.runMutation(internal.appStore.save, { apps, releaseUpdates, packageUpdates, errors });
+    await ctx.runMutation(internal.appStore.save, {
+      apps,
+      releaseUpdates,
+      packageUpdates,
+      errors,
+      awesomeDirs,
+    });
     return { apps: apps.length, errors };
   },
 });
@@ -208,8 +234,9 @@ export const save = internalMutation({
       }),
     ),
     errors: v.array(v.string()),
+    awesomeDirs: v.array(v.string()),
   },
-  handler: async (ctx, { apps, releaseUpdates, packageUpdates, errors }) => {
+  handler: async (ctx, { apps, releaseUpdates, packageUpdates, errors, awesomeDirs }) => {
     const now = Date.now();
     for (const row of await ctx.db.query("storeApps").collect()) {
       await ctx.db.delete(row._id);
@@ -241,8 +268,13 @@ export const save = internalMutation({
       }
     }
 
-    await writeStatus(ctx, { refreshedAt: now, appCount: apps.length, errors });
+    await writeStatus(ctx, { refreshedAt: now, appCount: apps.length, errors, awesomeDirs });
   },
+});
+
+export const status = internalQuery({
+  args: {},
+  handler: async (ctx) => await ctx.db.query("storeStatus").first(),
 });
 
 export const recordError = internalMutation({
@@ -253,13 +285,14 @@ export const recordError = internalMutation({
       refreshedAt: status?.refreshedAt ?? 0,
       appCount: status?.appCount ?? 0,
       errors: [`Refresh failed: ${error}`],
+      awesomeDirs: status?.awesomeDirs,
     });
   },
 });
 
 async function writeStatus(
   ctx: { db: import("./_generated/server").DatabaseWriter },
-  status: { refreshedAt: number; appCount: number; errors: string[] },
+  status: { refreshedAt: number; appCount: number; errors: string[]; awesomeDirs?: string[] },
 ) {
   const existing = await ctx.db.query("storeStatus").first();
   if (existing) {
