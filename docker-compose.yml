@@ -3,7 +3,11 @@ services:
   # Open-source Convex backend: database + realtime sync. Luma on the phone
   # and the web dashboard both talk to this over WebSockets.
   backend:
-    image: ghcr.io/get-convex/convex-backend:latest
+    build:
+      context: docker/backend
+      args:
+        CONVEX_RELEASE: ${CONVEX_RELEASE:-precompiled-2026-10-10-bb95347}
+    image: luma-dashboard-backend
     restart: unless-stopped
     stop_grace_period: 10s
     stop_signal: SIGINT
@@ -16,8 +20,6 @@ services:
       INSTANCE_SECRET: ${INSTANCE_SECRET:-}
       CONVEX_CLOUD_ORIGIN: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
       CONVEX_SITE_ORIGIN: ${PUBLIC_SITE_URL:-http://127.0.0.1:3211}
-      DISABLE_BEACON: "true"
-      DOCUMENT_RETENTION_DELAY: "172800"
     healthcheck:
       test: curl -f http://localhost:3210/version
       interval: 5s
@@ -51,19 +53,19 @@ services:
       deploy:
         condition: service_completed_successfully
 
-  # Optional Convex admin UI for browsing data and editing releaseVersions:
+  # Optional Convex admin UI for browsing data and editing releaseVersions.
+  # Sign in with PUBLIC_BACKEND_URL and CONVEX_ADMIN_KEY:
   #   docker compose --profile admin up -d convex-dashboard
   convex-dashboard:
     profiles: ["admin"]
-    image: ghcr.io/get-convex/convex-dashboard:latest
+    build:
+      context: docker/convex-dashboard
+      args:
+        CONVEX_RELEASE: ${CONVEX_RELEASE:-precompiled-2026-10-10-bb95347}
+    image: luma-dashboard-convex-admin
     restart: unless-stopped
     ports:
       - "${CONVEX_DASHBOARD_PORT:-6791}:6791"
-    environment:
-      NEXT_PUBLIC_DEPLOYMENT_URL: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
-    depends_on:
-      backend:
-        condition: service_healthy
 
 volumes:
   convex-data:

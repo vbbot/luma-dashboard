@@ -28,7 +28,7 @@ if ! grep -Eq '^INSTANCE_SECRET=.+' .env; then
   set_env INSTANCE_SECRET "$(openssl rand -hex 32)"
 fi
 
-compose up -d --wait backend
+compose up -d --build --wait backend
 
 if ! grep -Eq '^CONVEX_ADMIN_KEY=.+' .env; then
   admin_key=$(compose exec -T backend ./generate_admin_key.sh | tail -n 1 | tr -d '\r')
@@ -38,7 +38,8 @@ fi
 
 compose up -d --build
 
-. ./.env
+# Not `. ./.env`: the admin key contains '|', which the shell would run as a pipe.
+env_value() { sed -n "s#^$1=##p" .env; }
 echo
-echo "Dashboard: http://localhost:${WEB_PORT:-8080}"
-echo "In Luma, set Server to: ${PUBLIC_BACKEND_URL}"
+echo "Dashboard: http://localhost:$(env_value WEB_PORT)"
+echo "In Luma, set Server to: $(env_value PUBLIC_BACKEND_URL)"
