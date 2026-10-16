@@ -1,22 +1,62 @@
-FROM node:22-alpine AS deps
+# Two images from one file:
+#   --target web      static dashboard served by nginx
+#   --target backend  Convex backend that deploys convex/ on startup
+
+# Convex backend release: https://github.com/get-convex/convex-backend/releases
+ARG CONVEX_RELEASE=precompiled-2026-10-10-bb95347
+
+# The built site is plain files, so build once on the native platform.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-
-# One-shot job: pushes convex/ (schema + functions) to the backend, then exits.
-FROM deps AS deploy
-COPY tsconfig.json ./
-COPY convex ./convex
-CMD ["sh", "-c", "if [ -z \"${CONVEX_SELF_HOSTED_ADMIN_KEY:-}\" ]; then echo 'CONVEX_ADMIN_KEY is not set. Run ./setup.sh first.' >&2; exit 1; fi; exec npx convex deploy"]
-
-FROM deps AS build
 COPY . .
 RUN npm run build
 
-# Static web dashboard. The backend URL is injected at container start
-# (CONVEX_URL), so one image works for any deployment.
 FROM nginx:1.27-alpine AS web
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/entrypoint.sh /docker-entrypoint.d/40-luma-config.sh
 RUN chmod +x /docker-entrypoint.d/40-luma-config.sh
 COPY --from=build /app/dist /usr/share/nginx/html
+
+# Convex CLI for the target platform (it ships native esbuild binaries).
+FROM node:22-bookworm-slim AS convex-cli
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Ubuntu 24.04: the Convex release binary needs glibc 2.39.
+FROM ubuntu:24.04 AS backend
+ARG CONVEX_RELEASE
+ARG TARGETARCH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    case "$TARGETARCH" in \
+      amd64) arch=x86_64 ;; \
+      arm64) arch=aarch64 ;; \
+      *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/backend.zip \
+      "https://github.com/get-convex/convex-backend/releases/download/${CONVEX_RELEASE}/convex-local-backend-${arch}-unknown-linux-gnu.zip"; \
+    unzip /tmp/backend.zip -d /usr/local/bin; \
+    rm /tmp/backend.zip; \
+    chmod +x /usr/local/bin/convex-local-backend
+
+COPY --from=convex-cli /usr/local/bin/node /usr/local/bin/node
+WORKDIR /app
+COPY --from=convex-cli /app/node_modules ./node_modules
+COPY package.json tsconfig.json ./
+COPY convex ./convex
+COPY docker/backend/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/backend/admin-key.sh /usr/local/bin/admin-key
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/admin-key
+
+VOLUME /convex/data
+EXPOSE 3210 3211
+HEALTHCHECK --interval=5s --start-period=60s \
+  CMD test -f /tmp/ready && curl -fs http://localhost:3210/version
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

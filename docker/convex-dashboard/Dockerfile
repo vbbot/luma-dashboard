@@ -2,7 +2,7 @@
 # backend URL and CONVEX_ADMIN_KEY.
 FROM nginx:1.27-alpine
 
-ARG CONVEX_RELEASE
+ARG CONVEX_RELEASE=precompiled-2026-10-10-bb95347
 
 RUN set -eu; \
     apk add --no-cache curl unzip; \

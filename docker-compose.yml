@@ -1,13 +1,13 @@
-# Self-hosted Luma dashboard. First run: ./setup.sh
+# Self-hosted Luma dashboard.
+#   1. Set PUBLIC_BACKEND_URL in .env (see .env.example)
+#   2. docker compose up -d
+# To build the images from source instead of pulling them:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 services:
-  # Open-source Convex backend: database + realtime sync. Luma on the phone
-  # and the web dashboard both talk to this over WebSockets.
+  # Convex backend with the dashboard functions. Luma on the phone and the
+  # web dashboard both connect to it.
   backend:
-    build:
-      context: docker/backend
-      args:
-        CONVEX_RELEASE: ${CONVEX_RELEASE:-precompiled-2026-10-10-bb95347}
-    image: luma-dashboard-backend
+    image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     stop_grace_period: 10s
     stop_signal: SIGINT
@@ -16,56 +16,36 @@ services:
     volumes:
       - convex-data:/convex/data
     environment:
-      INSTANCE_NAME: luma-dashboard
+      # Optional. Generated and stored in the volume when unset.
       INSTANCE_SECRET: ${INSTANCE_SECRET:-}
       CONVEX_CLOUD_ORIGIN: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
       CONVEX_SITE_ORIGIN: ${PUBLIC_SITE_URL:-http://127.0.0.1:3211}
     healthcheck:
-      test: curl -f http://localhost:3210/version
+      test: ["CMD-SHELL", "test -f /tmp/ready && curl -fs http://localhost:3210/version"]
       interval: 5s
-      start_period: 10s
+      start_period: 60s
 
-  # Pushes the functions in convex/ to the backend on every `up`, then exits.
-  deploy:
-    build:
-      context: .
-      target: deploy
-    restart: "no"
-    environment:
-      CONVEX_SELF_HOSTED_URL: http://backend:3210
-      CONVEX_SELF_HOSTED_ADMIN_KEY: ${CONVEX_ADMIN_KEY:-}
-    depends_on:
-      backend:
-        condition: service_healthy
-
-  # The web dashboard (static files served by nginx).
   web:
-    build:
-      context: .
-      target: web
-    image: luma-dashboard-web
+    image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-8080}:80"
     environment:
       CONVEX_URL: ${PUBLIC_BACKEND_URL:-http://127.0.0.1:3210}
     depends_on:
-      deploy:
-        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
 
-  # Optional Convex admin UI for browsing data and editing releaseVersions.
-  # Sign in with PUBLIC_BACKEND_URL and CONVEX_ADMIN_KEY:
-  #   docker compose --profile admin up -d convex-dashboard
-  convex-dashboard:
+  # Optional Convex admin UI for browsing data:
+  #   docker compose --profile admin up -d convex-admin
+  # Sign in with PUBLIC_BACKEND_URL and the key from:
+  #   docker compose exec backend admin-key
+  convex-admin:
     profiles: ["admin"]
-    build:
-      context: docker/convex-dashboard
-      args:
-        CONVEX_RELEASE: ${CONVEX_RELEASE:-precompiled-2026-10-10-bb95347}
-    image: luma-dashboard-convex-admin
+    image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-convex-admin:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
-      - "${CONVEX_DASHBOARD_PORT:-6791}:6791"
+      - "${CONVEX_ADMIN_PORT:-6791}:6791"
 
 volumes:
   convex-data:

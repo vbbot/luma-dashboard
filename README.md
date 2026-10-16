@@ -14,15 +14,19 @@ Luma from a branch that has it, then enter this server's backend URL there.
 
 ## Running with Docker
 
-Requires Docker with Compose v2.
+Requires Docker with Compose v2 (or Podman). No checkout is needed, only two files:
 
 ```sh
-cp .env.example .env     # then set PUBLIC_BACKEND_URL (see below)
-./setup.sh
+mkdir luma-dashboard && cd luma-dashboard
+curl -fsSLO https://raw.githubusercontent.com/vbbot/luma-dashboard/main/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/vbbot/luma-dashboard/main/.env.example
+# edit .env and set PUBLIC_BACKEND_URL (see below)
+docker compose up -d
 ```
 
-`setup.sh` generates `INSTANCE_SECRET` and `CONVEX_ADMIN_KEY` in `.env`, starts the backend,
-deploys the functions, and starts the web dashboard on `http://localhost:8080`.
+The dashboard is then at `http://localhost:8080`. On first start the backend generates its
+instance secret, stores it in the data volume, and deploys the functions; it does that again on
+every start, so updating the image updates the functions.
 
 `PUBLIC_BACKEND_URL` must be reachable **from your phone**, since it is the URL you type into
 Luma, for example `http://192.168.1.20:3210` on a home network. For anything exposed to the
@@ -32,15 +36,30 @@ unencrypted.
 
 | Service | Port | Purpose |
 |---|---|---|
-| `backend` | 3210 | Convex backend. Phones and browsers connect here. |
-| `deploy` | – | One-shot job that pushes `convex/` to the backend on every `up`. |
+| `backend` | 3210 | Convex backend with the dashboard functions. Phones and browsers connect here. |
 | `web` | 8080 | The dashboard. |
-| `convex-dashboard` | 6791 | Optional Convex admin UI: `docker compose --profile admin up -d convex-dashboard`. Log in with `CONVEX_ADMIN_KEY`. |
+| `convex-admin` | 6791 | Optional Convex admin UI: `docker compose --profile admin up -d convex-admin`. Sign in with `PUBLIC_BACKEND_URL` and the key printed by `docker compose exec backend admin-key`. |
 
-Data lives in the `convex-data` volume. To update, `git pull && docker compose up -d --build`.
+Data lives in the `convex-data` volume. To update, `docker compose pull && docker compose up -d`.
+Set `IMAGE_TAG` in `.env` to a release such as `0.1.0` to pin a version instead of `latest`.
 
-The `web` image has no backend URL baked in. It reads `CONVEX_URL` when the container starts, so
-the same image can be published and reused for any deployment.
+### Images
+
+| Image | Contents |
+|---|---|
+| `ghcr.io/vbbot/luma-dashboard-backend` | Convex backend (built from the pinned [release binary](https://github.com/get-convex/convex-backend/releases)) plus `convex/` |
+| `ghcr.io/vbbot/luma-dashboard-web` | The built frontend on nginx. Reads `CONVEX_URL` at start, so one image works for any deployment. |
+| `ghcr.io/vbbot/luma-dashboard-convex-admin` | Convex's admin UI from the same release |
+
+All are built for `linux/amd64` and `linux/arm64` by
+[`.github/workflows/docker.yml`](.github/workflows/docker.yml): pushes to `main` publish
+`latest`, and tags like `v0.1.0` publish `0.1.0` and `0.1`.
+
+To build them from a checkout instead:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
 ## Development
 
