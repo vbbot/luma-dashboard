@@ -20,26 +20,51 @@ Requires Docker with Compose v2 (or Podman). No checkout is needed, only two fil
 mkdir luma-dashboard && cd luma-dashboard
 curl -fsSLO https://raw.githubusercontent.com/vbbot/luma-dashboard/main/docker-compose.yml
 curl -fsSL -o .env https://raw.githubusercontent.com/vbbot/luma-dashboard/main/.env.example
-# edit .env and set PUBLIC_URL (see below)
+# edit .env: set PUBLIC_URL and INSTANCE_SECRET (see below)
 docker compose up -d
 ```
 
-The dashboard is then at `http://localhost:8080`. On first start the backend generates its
-instance secret, stores it in the data volume, and deploys the functions; it does that again on
-every start, so updating the image updates the functions.
+Two settings in `.env` are required, and Compose refuses to start without them:
 
-Everything is served from one URL, `PUBLIC_URL`: the `web` container serves the dashboard and
-proxies the Convex API (`/api/…`, including the sync WebSocket) to the backend, which is not
-published at all. Enter the same URL under **Server** in Luma, so it must be reachable **from your
-phone**, for example `http://192.168.1.20:8080` on a home network. For anything exposed to the
-internet, put port 8080 behind an HTTPS reverse proxy (Caddy, Traefik, nginx) with WebSockets
-enabled and use `https://…`. Over plain `http` the account number travels unencrypted.
+- `PUBLIC_URL`: the address of the dashboard. Enter the same URL under **Server** in Luma, so it
+  must be reachable from your phone, e.g. `https://luma.example.com`, or
+  `http://192.168.1.20:8080` on a home network.
+- `INSTANCE_SECRET`: the backend's root secret. Every admin key is derived from it. Generate it
+  with `openssl rand -hex 32`; it must be exactly 64 lowercase hex characters, so general password
+  generators such as `pwgen` will not work. Keep it private and don't change it once there is data.
 
-| Service | Port | Purpose |
+On every start the backend deploys the dashboard functions, so updating the image updates them.
+
+### Exposure
+
+| Service | Listens on | Purpose |
 |---|---|---|
-| `backend` | – | Convex backend with the dashboard functions. Internal only. |
-| `web` | 8080 | The dashboard, and a proxy to the backend. Phones and browsers connect here. |
-| `convex-admin` | 6791 | Optional Convex admin UI: `docker compose --profile admin up -d convex-admin`. Sign in with `PUBLIC_URL` and the key printed by `docker compose exec backend admin-key`. |
+| `web` | `WEB_PORT` (8080), all interfaces | `PUBLIC_URL`. Serves the dashboard and proxies **only** the Convex sync WebSocket (`/api/sync` for Luma, `/api/<version>/sync` for the dashboard). Every other `/api/` path, such as deploying code or exporting data, returns 404. |
+| `convex-admin` | `127.0.0.1:6791` only | Convex's admin UI, with a proxy to the full backend API. |
+| `backend` | not published | Reached only through the two containers above. |
+
+For internet access, put `WEB_PORT` behind an HTTPS reverse proxy (Caddy, Traefik, nginx) with
+WebSockets enabled, and use the `https://` address as `PUBLIC_URL`. Over plain `http` the
+account number travels unencrypted.
+
+An admin key can still talk to the backend over the public sync connection: it can read and
+change data, but deploying code and the other admin endpoints are unreachable from outside.
+Treat admin keys and `INSTANCE_SECRET` like root passwords.
+
+### Admin UI
+
+```sh
+docker compose exec backend admin-key   # prints an admin key; each run prints a new valid one
+```
+
+Open http://127.0.0.1:6791 on the Docker host and sign in with `http://127.0.0.1:6791` as the
+deployment URL and the printed key. From another machine, tunnel the port first:
+
+```sh
+ssh -L 6791:127.0.0.1:6791 user@docker-host
+```
+
+### Updating
 
 Data lives in the `convex-data` volume. To update, `docker compose pull && docker compose up -d`.
 Set `IMAGE_TAG` in `.env` to a release such as `0.1.0` to pin a version instead of `latest`.
@@ -49,8 +74,8 @@ Set `IMAGE_TAG` in `.env` to a release such as `0.1.0` to pin a version instead 
 | Image | Contents |
 |---|---|
 | `ghcr.io/vbbot/luma-dashboard-backend` | Convex backend (built from the pinned [release binary](https://github.com/get-convex/convex-backend/releases)) plus `convex/` |
-| `ghcr.io/vbbot/luma-dashboard-web` | The built frontend on nginx, proxying `/api/` to `BACKEND_UPSTREAM` (default `backend:3210`). Has no URL baked in, so one image works for any deployment. |
-| `ghcr.io/vbbot/luma-dashboard-convex-admin` | Convex's admin UI from the same release |
+| `ghcr.io/vbbot/luma-dashboard-web` | The built frontend on nginx, proxying the sync WebSocket to `BACKEND_UPSTREAM` (default `backend:3210`). Has no URL baked in, so one image works for any deployment. |
+| `ghcr.io/vbbot/luma-dashboard-convex-admin` | Convex's admin UI from the same release, proxying the full API to `BACKEND_UPSTREAM` |
 
 All are built for `linux/amd64` and `linux/arm64` by
 [`.github/workflows/docker.yml`](.github/workflows/docker.yml): pushes to `main` publish

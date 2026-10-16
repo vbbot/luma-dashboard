@@ -1,5 +1,5 @@
-# Convex's admin UI (static export from the same release). Sign in with the
-# backend URL and CONVEX_ADMIN_KEY.
+# Convex's admin UI (static export from the same release) with a proxy to
+# the backend. Sign in with this container's own URL and an admin key.
 FROM nginx:1.27-alpine
 
 ARG CONVEX_RELEASE=precompiled-2026-10-10-bb95347
@@ -13,4 +13,6 @@ RUN set -eu; \
     rm /tmp/dashboard.zip; \
     apk del curl unzip
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# host:port of the backend as seen from this container.
+ENV BACKEND_UPSTREAM=backend:3210
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template

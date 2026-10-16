@@ -1,16 +1,21 @@
 #!/bin/sh
-# Prints the admin key, e.g. for the Convex admin UI:
+# Prints an admin key for the Convex admin UI:
 #   docker compose exec backend admin-key
-# When sourced with ADMIN_KEY_SOURCED=1, only defines INSTANCE_NAME, INSTANCE_SECRET and admin_key.
+# Keys are derived from INSTANCE_SECRET; every run prints a new, equally
+# valid key. When sourced with ADMIN_KEY_SOURCED=1, only validates the
+# environment and defines admin_key.
 set -eu
 
 INSTANCE_NAME="${INSTANCE_NAME:-luma-dashboard}"
-if [ -z "${INSTANCE_SECRET:-}" ]; then
-  secret_file=/convex/data/instance_secret
-  if [ ! -s "$secret_file" ]; then
-    (umask 077 && node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))' > "$secret_file")
-  fi
-  INSTANCE_SECRET=$(cat "$secret_file")
+case "${INSTANCE_SECRET:-}" in
+  *[!0-9a-f]*|"")
+    echo "INSTANCE_SECRET must be 64 lowercase hex characters. Generate one with: openssl rand -hex 32" >&2
+    exit 1
+    ;;
+esac
+if [ "${#INSTANCE_SECRET}" -ne 64 ]; then
+  echo "INSTANCE_SECRET must be 64 lowercase hex characters. Generate one with: openssl rand -hex 32" >&2
+  exit 1
 fi
 export INSTANCE_NAME INSTANCE_SECRET
 

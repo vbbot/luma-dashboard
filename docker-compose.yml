@@ -1,13 +1,41 @@
 # Self-hosted Luma dashboard.
-#   1. Set PUBLIC_URL in .env (see .env.example)
+#
+# Setup:
+#   1. Create .env next to this file (see .env.example) with:
+#
+#        PUBLIC_URL=https://luma.example.com
+#        INSTANCE_SECRET=<64 hex characters>
+#
+#      INSTANCE_SECRET is the root secret of the backend; every admin key is
+#      derived from it, so keep it private and never change it once data
+#      exists. Generate it with:
+#
+#        openssl rand -hex 32
+#
+#      (pwgen and similar tools are not suitable: it must be exactly 64
+#      lowercase hex characters.)
+#
 #   2. docker compose up -d
-# The dashboard and the backend share that one URL; enter it under Server in
-# Luma as well.
+#
+#   3. Get an admin key for the admin UI whenever you need one:
+#
+#        docker compose exec backend admin-key
+#
+# Exposed ports:
+#   web           PUBLIC_URL. Serves the dashboard and the sync API that Luma
+#                 and the dashboard use. Put this behind your HTTPS proxy and
+#                 enter the same URL under Server in Luma.
+#   convex-admin  127.0.0.1 only. Convex's admin UI with full backend access.
+#                 From another machine use an SSH tunnel:
+#                   ssh -L 6791:127.0.0.1:6791 <host>
+#                 then open http://127.0.0.1:6791 and sign in with
+#                 http://127.0.0.1:6791 as the deployment URL.
+#
 # To build the images from source instead of pulling them:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 services:
-  # Convex backend with the dashboard functions. Not published: it is reached
-  # through the web container.
+  # Convex backend with the dashboard functions. Not published; reached
+  # through the web and convex-admin containers.
   backend:
     image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -16,15 +44,13 @@ services:
     volumes:
       - convex-data:/convex/data
     environment:
-      # Optional. Generated and stored in the volume when unset.
-      INSTANCE_SECRET: ${INSTANCE_SECRET:-}
-      CONVEX_CLOUD_ORIGIN: ${PUBLIC_URL:-http://127.0.0.1:8080}
+      INSTANCE_SECRET: ${INSTANCE_SECRET:?Set INSTANCE_SECRET in .env (generate with openssl rand -hex 32)}
+      CONVEX_CLOUD_ORIGIN: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/ready && curl -fs http://localhost:3210/version"]
       interval: 5s
       start_period: 60s
 
-  # The dashboard, plus a proxy to the backend on the same origin.
   web:
     image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -34,16 +60,14 @@ services:
       backend:
         condition: service_healthy
 
-  # Optional Convex admin UI for browsing data:
-  #   docker compose --profile admin up -d convex-admin
-  # Sign in with PUBLIC_URL and the key from:
-  #   docker compose exec backend admin-key
   convex-admin:
-    profiles: ["admin"]
     image: ${IMAGE_PREFIX:-ghcr.io/vbbot}/luma-dashboard-convex-admin:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
-      - "${CONVEX_ADMIN_PORT:-6791}:6791"
+      - "127.0.0.1:${CONVEX_ADMIN_PORT:-6791}:6791"
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   convex-data:
