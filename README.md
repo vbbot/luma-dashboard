@@ -98,6 +98,32 @@ npm run dev           # in another terminal; http://localhost:5173
 `npx convex dev` writes `VITE_CONVEX_URL` to `.env.local`, which the frontend picks up. To test
 with a real phone, point Luma's Server setting at `http://<your-computer's-LAN-IP>:3210`.
 
+## App Store
+
+**Tools → + → App Store** lists every app from three sources, merged into one catalog:
+
+| Source | What it provides |
+|---|---|
+| No Scrolling | Vandam's apps (`buses`, `passes`, `weather`, `zero`, `echo`, `reverb`), which every Luma version can install |
+| [Bright Market](https://github.com/gi-os/brightmarket-index) | `index-v1.json`: package names, APK links with SHA-256, screenshots |
+| [awesome-light](https://github.com/garado/awesome-light) | `content/apps/*/index.md`: descriptions, categories, screenshots |
+
+`appStore:refresh` ([`convex/appStore.ts`](convex/appStore.ts)) rebuilds the catalog when the
+backend starts and every 6 hours:
+
+- **Duplicates.** Apps are matched by GitHub repo, then by package name, since Android can only
+  hold one app per package. A merged app lists every source it came from.
+- **Categories.** Both sources' categories map onto one list (`convex/storeSources.ts`).
+- **Releases.** For apps whose source has no APK link, the latest GitHub release is looked up
+  (cached by ETag). GitHub allows 60 lookups an hour without a token; set `GITHUB_TOKEN` (no
+  scopes needed) to do them all in one refresh.
+- **Package names.** For APKs with no listed package, the backend reads it from the APK's
+  `AndroidManifest.xml` using HTTP range requests, without downloading the whole APK.
+
+Apps with no APK in their latest release (or no release at all) are listed but can't be added.
+Adding an App Store app beyond Vandam's needs a Luma build with App Store support; older builds
+ignore those apps.
+
 ## Accounts
 
 As on the hosted dashboard, an account is just a random 16-digit number, generated in the browser
@@ -141,6 +167,16 @@ type DeviceSync = {
   enabledAppIds: string[];       // see managed app IDs
   enabledAndroidApps: { label: string; packageName: string; activityName: string }[];
   requestedAppUpdateVersions: Record<string, string>; // appId -> exact version to install
+  // App Store apps in enabledAppIds other than the built-in ones. Luma
+  // versions without App Store support ignore this field.
+  managedApps: {
+    id: string;          // "owner/repo", lowercase
+    label: string;
+    packageName: string;
+    apkUrl: string;      // the APK to download and install
+    versionName: string; // release version
+    sha256: string | null; // checked against the download when present
+  }[];
 };
 ```
 
@@ -202,8 +238,9 @@ npx convex run managedApps:setReleaseVersion '{"appId":"luma","versionName":"2.0
 Tool IDs (`data/Tool.kt`): `phone`, `settings`, `album`, `alarm`, `calculator`, `directions`,
 `directory`, `camera`, `notes`, `calendar`, `timer`, `music`, `podcasts`, `hotspot`.
 
-Managed app IDs (`data/ManagedApp.kt`, all from `github.com/vandamd/<id>`): `buses`, `passes`,
-`weather`, `zero`, `echo`, `reverb`.
+Built-in managed app IDs (`data/ManagedApp.kt`, all from `github.com/vandamd/<id>`): `buses`,
+`passes`, `weather`, `zero`, `echo`, `reverb`. Other App Store apps use their lowercase
+`owner/repo` as ID and reach Luma through `managedApps`.
 
 Both lists are hard-coded in Luma and mirrored in [`convex/catalog.ts`](convex/catalog.ts). If Luma
 adds new ones, update that file.

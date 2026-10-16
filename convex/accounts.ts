@@ -6,7 +6,7 @@ import {
   ACCOUNT_NUMBER_PATTERN,
   DEFAULT_TOOL_IDS,
   REQUIRED_TOOL_IDS,
-  isManagedAppId,
+  isBuiltinAppId,
   isToolId,
 } from "./catalog";
 
@@ -34,13 +34,39 @@ async function requireAccount(ctx: QueryCtx, accountNumber: string) {
   return account;
 }
 
-// Exactly the shape ToolSyncManager.DeviceSyncPayload decodes.
-function toDeviceSync(account: Doc<"accounts">) {
+async function findStoreApp(ctx: QueryCtx, appId: string) {
+  return await ctx.db
+    .query("storeApps")
+    .withIndex("by_appId", (q) => q.eq("appId", appId))
+    .unique();
+}
+
+// The shape ToolSyncManager.DeviceSyncPayload decodes. managedApps tells Luma
+// how to install App Store apps beyond the built-in ones; Luma versions that
+// predate it ignore unknown fields and only install built-in apps.
+async function toDeviceSync(ctx: QueryCtx, account: Doc<"accounts">) {
+  const storeApps = await Promise.all(
+    account.enabledAppIds.filter((id) => !isBuiltinAppId(id)).map((id) => findStoreApp(ctx, id)),
+  );
   return {
     enabledToolIds: account.enabledToolIds,
     enabledAppIds: account.enabledAppIds,
     enabledAndroidApps: account.enabledAndroidApps,
     requestedAppUpdateVersions: account.requestedAppUpdateVersions,
+    managedApps: storeApps.flatMap((app) =>
+      app?.packageName && app.latest
+        ? [
+            {
+              id: app.appId,
+              label: app.name,
+              packageName: app.packageName,
+              apkUrl: app.latest.apkUrl,
+              versionName: app.latest.version,
+              sha256: app.latest.sha256 ?? null,
+            },
+          ]
+        : [],
+    ),
   };
 }
 
@@ -97,7 +123,7 @@ export const attemptDeviceLogin = mutation({
       await ctx.db.patch(device._id, { lastSeenAt: Date.now() });
     }
 
-    return toDeviceSync(account);
+    return await toDeviceSync(ctx, account);
   },
 });
 
@@ -105,7 +131,7 @@ export const getDeviceSync = query({
   args: { accountNumber: v.string() },
   handler: async (ctx, { accountNumber }) => {
     const account = await findAccount(ctx, accountNumber);
-    return account === null ? null : toDeviceSync(account);
+    return account === null ? null : await toDeviceSync(ctx, account);
   },
 });
 
@@ -197,7 +223,7 @@ export const getDashboard = query({
     );
 
     return {
-      ...toDeviceSync(account),
+      ...(await toDeviceSync(ctx, account)),
       installedAndroidApps,
       devices: devices.map((device) => ({
         installationId: device.installationId,
@@ -220,7 +246,17 @@ export const setEnabledApps = mutation({
   args: { accountNumber: v.string(), appIds: v.array(v.string()) },
   handler: async (ctx, { accountNumber, appIds }) => {
     const account = await requireAccount(ctx, accountNumber);
-    const enabledAppIds = [...new Set(appIds.filter(isManagedAppId))];
+    const enabledAppIds: string[] = [];
+    for (const appId of new Set(appIds)) {
+      if (isBuiltinAppId(appId)) {
+        enabledAppIds.push(appId);
+        continue;
+      }
+      const app = await findStoreApp(ctx, appId);
+      if (app?.packageName && app.latest) {
+        enabledAppIds.push(appId);
+      }
+    }
     const requestedAppUpdateVersions = Object.fromEntries(
       Object.entries(account.requestedAppUpdateVersions).filter(([appId]) =>
         enabledAppIds.includes(appId),
@@ -255,7 +291,7 @@ export const requestAppVersion = mutation({
   },
   handler: async (ctx, { accountNumber, appId, versionName }) => {
     const account = await requireAccount(ctx, accountNumber);
-    if (!isManagedAppId(appId)) {
+    if (!isBuiltinAppId(appId)) {
       throw new Error("Unknown app");
     }
     const requestedAppUpdateVersions = { ...account.requestedAppUpdateVersions };

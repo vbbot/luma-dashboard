@@ -38,4 +38,19 @@ if ! (cd /app && CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210 \
 fi
 touch /tmp/ready
 
+# Optional: lets the App Store refresh read every GitHub release in one run
+# instead of 60 an hour.
+convex() {
+  (cd /app && CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210 \
+    CONVEX_SELF_HOSTED_ADMIN_KEY="$(admin_key)" ./node_modules/.bin/convex "$@" </dev/null)
+}
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  convex env set GITHUB_TOKEN "$GITHUB_TOKEN" >/dev/null || echo "Could not set GITHUB_TOKEN" >&2
+else
+  convex env remove GITHUB_TOKEN >/dev/null 2>&1 || true
+fi
+
+# Fill the App Store now rather than at the first scheduled refresh.
+(convex run appStore:refresh >/dev/null && echo "App Store refreshed" || echo "App Store refresh failed" >&2) &
+
 wait "$backend"

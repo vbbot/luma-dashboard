@@ -339,3 +339,103 @@ button {
     font-size: 0.9rem;
   }
 }
+
+/* App Store -------------------------------------------------------------- */
+
+.store-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  font-size: 3rem;
+  text-decoration: none;
+}
+
+.store-count {
+  color: var(--muted);
+  font-size: 1.4rem;
+}
+
+.store-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem 0;
+  text-decoration: none;
+  text-align: center;
+}
+
+.store-app-name {
+  font-size: 3rem;
+  line-height: 1.2;
+}
+
+.store-app-sources {
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.store-app-unavailable .store-app-name {
+  color: var(--disabled);
+}
+
+.store-row:hover span:first-child,
+.store-app:hover .store-app-name {
+  text-decoration: underline;
+  text-underline-offset: 0.4rem;
+}
+
+.store-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 56rem);
+  text-align: center;
+}
+
+.store-shots {
+  display: flex;
+  gap: 0.75rem;
+  max-width: 100%;
+  padding: 1.25rem;
+  overflow-x: auto;
+  background: #3a3a3a;
+}
+
+.store-shots img {
+  height: 15rem;
+  border-radius: 2px;
+}
+
+.store-meta {
+  margin: 1.5rem 0 0;
+  font-size: 1.3rem;
+  line-height: 1.6;
+}
+
+.store-meta a {
+  text-underline-offset: 0.25rem;
+}
+
+.store-summary {
+  max-width: 44rem;
+  margin: 1.5rem 0 0;
+  font-size: 1.3rem;
+  line-height: 1.6;
+}
+
+.store-button {
+  width: min(100%, 26rem);
+  margin-top: 2rem;
+}
+
+@media (max-width: 700px) {
+  .store-row,
+  .store-app-name {
+    font-size: 2rem;
+  }
+
+  .store-shots img {
+    height: 11rem;
+  }
+}

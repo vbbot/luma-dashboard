@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import type { Category } from "./items";
+import type { ListCategory } from "./items";
 import { navigate, useRoute } from "./router";
 import { useSession } from "./session";
 import { Loading, Screen } from "./ui";
@@ -11,8 +11,9 @@ import { HelpScreen, HomeScreen, PrivacyScreen } from "./screens/InfoScreens";
 import { AddCategoryScreen, AddToolsScreen, ToolsScreen } from "./screens/ToolsScreens";
 import { AccountScreen } from "./screens/AccountScreen";
 import { MessageScreen } from "./screens/MessageScreen";
+import { StoreAppScreen, StoreCategoriesScreen, StoreCategoryScreen, storeCategoryPath } from "./screens/StoreScreens";
 
-const CATEGORIES: Category[] = ["light", "noscroll", "android"];
+const CATEGORIES: ListCategory[] = ["light", "android"];
 
 export function App() {
   const route = useRoute();
@@ -59,6 +60,7 @@ function SignedIn({
   onLogOut: () => void;
 }) {
   const dashboard = useQuery(api.accounts.getDashboard, { accountNumber });
+  const store = useQuery(api.appStore.list);
 
   // The account was deleted, possibly from another browser.
   useEffect(() => {
@@ -78,7 +80,7 @@ function SignedIn({
   if (route === "/message") {
     return <MessageScreen accountNumber={accountNumber} />;
   }
-  if (!route.startsWith("/tools")) {
+  if (!route.startsWith("/tools") && !route.startsWith("/store")) {
     return <HomeScreen />;
   }
 
@@ -90,6 +92,30 @@ function SignedIn({
     );
   }
 
+  if (route === "/store") {
+    return <StoreCategoriesScreen store={store} />;
+  }
+  const storeCategory = /^\/store\/c\/(.+)$/.exec(route)?.[1];
+  if (storeCategory !== undefined) {
+    return (
+      <StoreCategoryScreen store={store} dashboard={dashboard} category={decodeURIComponent(storeCategory)} />
+    );
+  }
+  const storeAppId = /^\/store\/app\/(.+)$/.exec(route)?.[1];
+  if (storeAppId !== undefined) {
+    const appId = decodeURIComponent(storeAppId);
+    const category = store?.apps.find((app) => app.appId === appId)?.category;
+    return (
+      <StoreAppScreen
+        store={store}
+        dashboard={dashboard}
+        accountNumber={accountNumber}
+        appId={appId}
+        backTo={category ? storeCategoryPath(category) : "/store"}
+      />
+    );
+  }
+
   if (route === "/tools/add") {
     return <AddToolsScreen />;
   }
@@ -97,5 +123,5 @@ function SignedIn({
   if (category !== undefined) {
     return <AddCategoryScreen accountNumber={accountNumber} dashboard={dashboard} category={category} />;
   }
-  return <ToolsScreen accountNumber={accountNumber} dashboard={dashboard} />;
+  return <ToolsScreen accountNumber={accountNumber} dashboard={dashboard} store={store} />;
 }

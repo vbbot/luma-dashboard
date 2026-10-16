@@ -46,6 +46,9 @@ services:
     environment:
       INSTANCE_SECRET: ${INSTANCE_SECRET:?Set INSTANCE_SECRET in .env (generate with openssl rand -hex 32)}
       CONVEX_CLOUD_ORIGIN: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
+      # Optional GitHub token (no scopes needed) so App Store refreshes are
+      # not limited to 60 GitHub API requests an hour.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/ready && curl -fs http://localhost:3210/version"]
       interval: 5s

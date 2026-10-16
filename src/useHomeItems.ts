@@ -11,7 +11,7 @@ export function useHomeItemActions(accountNumber: string, dashboard: Dashboard) 
     switch (item.category) {
       case "light":
         return setEnabledTools({ accountNumber, toolIds: [...dashboard.enabledToolIds, item.id] });
-      case "noscroll":
+      case "store":
         return setEnabledApps({ accountNumber, appIds: [...dashboard.enabledAppIds, item.id] });
       case "android":
         return setEnabledAndroidApps({
@@ -28,7 +28,7 @@ export function useHomeItemActions(accountNumber: string, dashboard: Dashboard) 
           accountNumber,
           toolIds: dashboard.enabledToolIds.filter((id) => id !== item.id),
         });
-      case "noscroll":
+      case "store":
         return setEnabledApps({
           accountNumber,
           appIds: dashboard.enabledAppIds.filter((id) => id !== item.id),

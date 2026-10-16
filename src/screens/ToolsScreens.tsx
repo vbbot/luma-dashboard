@@ -6,6 +6,8 @@ import {
   type Category,
   type Dashboard,
   type HomeItem,
+  type ListCategory,
+  type Store,
 } from "../items";
 import { useHomeItemActions } from "../useHomeItems";
 import { navigate } from "../router";
@@ -32,7 +34,7 @@ function usePendingAction(action: (item: HomeItem) => Promise<unknown>) {
   return { pendingKey, error, run };
 }
 
-export function ToolsScreen({ accountNumber, dashboard }: Props) {
+export function ToolsScreen({ accountNumber, dashboard, store }: Props & { store: Store | undefined }) {
   const { remove } = useHomeItemActions(accountNumber, dashboard);
   const { pendingKey, error, run } = usePendingAction(remove);
 
@@ -44,7 +46,7 @@ export function ToolsScreen({ accountNumber, dashboard }: Props) {
     >
       {error !== null && <p className="error">{error}</p>}
       <div className="item-list">
-        {enabledItems(dashboard).map((item) => (
+        {enabledItems(dashboard, store).map((item) => (
           <ItemRow
             key={item.key}
             label={item.label}
@@ -64,7 +66,7 @@ export function AddToolsScreen() {
     <Screen title="Add Tools" backTo="/tools" centered>
       <nav className="menu">
         {(Object.keys(CATEGORY_LABELS) as Category[]).map((category) => (
-          <MenuLink key={category} to={`/tools/add/${category}`}>
+          <MenuLink key={category} to={category === "store" ? "/store" : `/tools/add/${category}`}>
             {CATEGORY_LABELS[category]}
           </MenuLink>
         ))}
@@ -73,14 +75,13 @@ export function AddToolsScreen() {
   );
 }
 
-const EMPTY_MESSAGES: Record<Category, string> = {
+const EMPTY_MESSAGES: Record<ListCategory, string> = {
   light: "All Light tools are already added.",
-  noscroll: "All No Scrolling apps are already added.",
   android:
     "No more apps to add. Apps installed on your phone appear here after Luma syncs with this server.",
 };
 
-export function AddCategoryScreen({ accountNumber, dashboard, category }: Props & { category: Category }) {
+export function AddCategoryScreen({ accountNumber, dashboard, category }: Props & { category: ListCategory }) {
   const { add } = useHomeItemActions(accountNumber, dashboard);
   const { pendingKey, error, run } = usePendingAction(async (item) => {
     await add(item);

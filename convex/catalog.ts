@@ -25,24 +25,26 @@ export const REQUIRED_TOOL_IDS = ["phone", "settings"] as const;
 
 export const DEFAULT_TOOL_IDS = ["phone", "settings"];
 
-export const MANAGED_APPS = [
-  { id: "buses", label: "Buses" },
-  { id: "passes", label: "Passes" },
-  { id: "weather", label: "Weather" },
-  { id: "zero", label: "Zero" },
-  { id: "echo", label: "Echo" },
-  { id: "reverb", label: "Reverb" },
+// Vandam's apps, which every Luma version knows by these IDs. They are also
+// the "No Scrolling" source of the App Store.
+export const BUILTIN_APPS = [
+  { id: "buses", label: "Buses", packageName: "com.vandam.buses", repo: "vandamd/buses" },
+  { id: "passes", label: "Passes", packageName: "com.vandamd.passes", repo: "vandamd/passes" },
+  { id: "weather", label: "Weather", packageName: "com.vandam.weather", repo: "vandamd/weather" },
+  { id: "zero", label: "Zero", packageName: "com.vandam.zero", repo: "vandamd/zero" },
+  { id: "echo", label: "Echo", packageName: "com.vandam.echo", repo: "vandamd/echo" },
+  { id: "reverb", label: "Reverb", packageName: "com.vandam.reverb", repo: "vandamd/reverb" },
 ] as const;
 
 export const ACCOUNT_NUMBER_PATTERN = /^\d{16}$/;
 
 const toolIds = new Set<string>(LIGHT_TOOLS.map((tool) => tool.id));
-const managedAppIds = new Set<string>(MANAGED_APPS.map((app) => app.id));
+const builtinAppIds = new Set<string>(BUILTIN_APPS.map((app) => app.id));
 
 export function isToolId(id: string): boolean {
   return toolIds.has(id);
 }
 
-export function isManagedAppId(id: string): boolean {
-  return managedAppIds.has(id);
+export function isBuiltinAppId(id: string): boolean {
+  return builtinAppIds.has(id);
 }

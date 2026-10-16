@@ -12,6 +12,27 @@ export const installedManagedApp = v.object({
   versionName: v.string(),
 });
 
+export const release = v.object({
+  version: v.string(),
+  apkUrl: v.string(),
+  sha256: v.optional(v.string()),
+});
+
+export const storeApp = v.object({
+  appId: v.string(),
+  name: v.string(),
+  summary: v.string(),
+  category: v.string(),
+  sources: v.array(v.object({ id: v.string(), url: v.string() })),
+  repo: v.string(),
+  author: v.string(),
+  authorUrl: v.optional(v.string()),
+  screenshots: v.array(v.string()),
+  packageName: v.optional(v.string()),
+  latest: v.optional(release),
+  editorPick: v.optional(v.boolean()),
+});
+
 export default defineSchema({
   accounts: defineTable({
     accountNumber: v.string(),
@@ -39,6 +60,29 @@ export default defineSchema({
     // Unix epoch milliseconds. The launcher hides the message after this.
     expiresAt: v.number(),
   }).index("by_account", ["accountId"]),
+
+  // App Store catalog, rebuilt by appStore:refresh from all sources.
+  storeApps: defineTable(storeApp).index("by_appId", ["appId"]),
+
+  // Caches that let a refresh skip unchanged GitHub releases and APKs.
+  storeReleases: defineTable({
+    repo: v.string(),
+    etag: v.optional(v.string()),
+    release: v.optional(release),
+    checkedAt: v.number(),
+  }).index("by_repo", ["repo"]),
+  storePackages: defineTable({
+    apkUrl: v.string(),
+    packageName: v.optional(v.string()),
+    error: v.optional(v.string()),
+    checkedAt: v.number(),
+  }).index("by_apkUrl", ["apkUrl"]),
+
+  storeStatus: defineTable({
+    refreshedAt: v.number(),
+    appCount: v.number(),
+    errors: v.array(v.string()),
+  }),
 
   // appId -> latest version. The launcher reads the "luma" key to offer
   // self-updates from GitHub. Edit rows from the Convex dashboard.
