@@ -86,6 +86,14 @@ export default defineSchema({
     awesomeDirs: v.optional(v.array(v.string())),
   }),
 
+  // Solved captchas, kept until their challenge expires so each is used once.
+  usedCaptchas: defineTable({
+    signature: v.string(),
+    expiresAt: v.number(),
+  })
+    .index("by_signature", ["signature"])
+    .index("by_expiresAt", ["expiresAt"]),
+
   // appId -> latest version. The launcher reads the "luma" key to offer
   // self-updates from GitHub. Edit rows from the Convex dashboard.
   releaseVersions: defineTable({

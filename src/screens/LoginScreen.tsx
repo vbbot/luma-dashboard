@@ -1,14 +1,18 @@
 import { useState, type FormEvent } from "react";
-import { useConvex } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { CaptchaPayload } from "../../convex/captcha";
+import { Captcha } from "../Captcha";
 import { formatAccountNumber } from "../session";
 import { Screen } from "../ui";
 
 export function LoginScreen({ onLogIn }: { onLogIn: (accountNumber: string) => void }) {
-  const convex = useConvex();
+  const logIn = useMutation(api.accounts.logIn);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [captcha, setCaptcha] = useState<CaptchaPayload | null>(null);
+  const [captchaKey, setCaptchaKey] = useState(0);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -17,19 +21,25 @@ export function LoginScreen({ onLogIn }: { onLogIn: (accountNumber: string) => v
       setError("Enter a 16-digit account number.");
       return;
     }
+    if (captcha === null) {
+      setError("Confirm you are not a robot.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      if (await convex.query(api.accounts.exists, { accountNumber: digits })) {
+      if (await logIn({ accountNumber: digits, captcha })) {
         onLogIn(digits);
-      } else {
-        setError("That account number was not found.");
+        return;
       }
+      setError("That account number was not found.");
     } catch {
-      setError("Unable to reach the server.");
-    } finally {
-      setSubmitting(false);
+      setError("Unable to log in. Try again.");
     }
+    // Each captcha works once.
+    setCaptcha(null);
+    setCaptchaKey((key) => key + 1);
+    setSubmitting(false);
   }
 
   return (
@@ -48,6 +58,7 @@ export function LoginScreen({ onLogIn }: { onLogIn: (accountNumber: string) => v
           }}
           autoFocus
         />
+        <Captcha key={captchaKey} onChange={setCaptcha} />
         <button className="button" type="submit" disabled={submitting}>
           Login
         </button>

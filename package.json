@@ -11,6 +11,8 @@
     "convex:deploy": "convex deploy"
   },
   "dependencies": {
+    "altcha": "^3.4.0",
+    "altcha-lib": "^2.6.0",
     "convex": "^1.46.0",
     "fflate": "^0.8.3",
     "react": "^19.3.1",

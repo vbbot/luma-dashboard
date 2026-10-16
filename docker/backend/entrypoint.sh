@@ -29,10 +29,17 @@ until curl -fs http://127.0.0.1:3210/version >/dev/null; do
   sleep 1
 done
 
+convex() {
+  (cd /app && CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210 \
+    CONVEX_SELF_HOSTED_ADMIN_KEY="$(admin_key)" ./node_modules/.bin/convex "$@" </dev/null)
+}
+
 echo "Deploying functions"
-if ! (cd /app && CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210 \
-  CONVEX_SELF_HOSTED_ADMIN_KEY="$(admin_key)" \
-  ./node_modules/.bin/convex deploy --typecheck disable --codegen disable </dev/null); then
+# The login captcha signs its challenges with a key derived from the
+# instance secret, so it survives restarts without another setting.
+if ! convex deploy --typecheck disable --codegen disable ||
+  ! convex env set ALTCHA_HMAC_KEY \
+    "$(printf 'altcha:%s' "$INSTANCE_SECRET" | sha256sum | cut -d' ' -f1)" >/dev/null; then
   kill -INT "$backend"
   exit 1
 fi
@@ -40,10 +47,6 @@ touch /tmp/ready
 
 # Optional: lets the App Store refresh read every GitHub release in one run
 # instead of 60 an hour.
-convex() {
-  (cd /app && CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210 \
-    CONVEX_SELF_HOSTED_ADMIN_KEY="$(admin_key)" ./node_modules/.bin/convex "$@" </dev/null)
-}
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   convex env set GITHUB_TOKEN "$GITHUB_TOKEN" >/dev/null || echo "Could not set GITHUB_TOKEN" >&2
 else

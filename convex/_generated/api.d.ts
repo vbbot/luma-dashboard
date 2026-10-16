@@ -11,6 +11,7 @@
 import type * as accounts from "../accounts.js";
 import type * as apk from "../apk.js";
 import type * as appStore from "../appStore.js";
+import type * as captcha from "../captcha.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as lockscreenMessages from "../lockscreenMessages.js";
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
   apk: typeof apk;
   appStore: typeof appStore;
+  captcha: typeof captcha;
   catalog: typeof catalog;
   crons: typeof crons;
   lockscreenMessages: typeof lockscreenMessages;

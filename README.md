@@ -92,6 +92,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```sh
 npm install
 npx convex dev        # runs a local backend and redeploys convex/ on save
+npx convex env set ALTCHA_HMAC_KEY "$(openssl rand -hex 32)"   # once, for the login captcha
 npm run dev           # in another terminal; http://localhost:5173
 ```
 
@@ -131,6 +132,12 @@ ignore those apps.
 As on the hosted dashboard, an account is just a random 16-digit number, generated in the browser
 with `crypto.getRandomValues`. Anyone who knows the number can read and change the account, and
 there is no recovery.
+
+Logging in and creating an account both need an [ALTCHA](https://altcha.org) captcha: an
+"I'm not a robot" checkbox that makes the browser solve a short proof-of-work, with no third-party
+service. The backend issues signed challenges (`captcha:challenge`), checks the solution in
+`accounts:logIn` and `accounts:create`, and accepts each solution only once. The Docker backend
+derives the signing key from `INSTANCE_SECRET`; nothing needs configuring.
 
 ## The Luma ⇄ server protocol
 

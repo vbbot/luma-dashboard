@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { androidApp, installedManagedApp } from "./schema";
+import { captchaPayload, requireCaptcha } from "./captcha";
 import {
   ACCOUNT_NUMBER_PATTERN,
   DEFAULT_TOOL_IDS,
@@ -179,11 +180,12 @@ export const syncInstalledApps = mutation({
 export const create = mutation({
   // The browser generates the number with crypto.getRandomValues, because
   // Math.random inside Convex functions is deterministic.
-  args: { accountNumber: v.string() },
-  handler: async (ctx, { accountNumber }) => {
+  args: { accountNumber: v.string(), captcha: captchaPayload },
+  handler: async (ctx, { accountNumber, captcha }) => {
     if (!ACCOUNT_NUMBER_PATTERN.test(accountNumber)) {
       throw new Error("Account number must be 16 digits");
     }
+    await requireCaptcha(ctx, captcha);
     if ((await findAccount(ctx, accountNumber)) !== null) {
       throw new Error("Account number already taken");
     }
@@ -198,10 +200,14 @@ export const create = mutation({
   },
 });
 
-export const exists = query({
-  args: { accountNumber: v.string() },
-  handler: async (ctx, { accountNumber }) =>
-    (await findAccount(ctx, accountNumber)) !== null,
+// Dashboard login: true if the account exists. A mutation so the captcha can
+// be marked as used.
+export const logIn = mutation({
+  args: { accountNumber: v.string(), captcha: captchaPayload },
+  handler: async (ctx, { accountNumber, captcha }) => {
+    await requireCaptcha(ctx, captcha);
+    return (await findAccount(ctx, accountNumber)) !== null;
+  },
 });
 
 export const getDashboard = query({
