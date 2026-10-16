@@ -5,6 +5,15 @@
 set -eu
 cd "$(dirname "$0")"
 
+if docker compose version >/dev/null 2>&1; then
+  compose() { docker compose "$@"; }
+elif command -v docker-compose >/dev/null 2>&1; then
+  compose() { docker-compose "$@"; }
+else
+  echo "Docker Compose not found. Install the compose plugin: https://docs.docker.com/compose/install/" >&2
+  exit 1
+fi
+
 set_env() {
   # $1 = key, $2 = value. Values never contain '#'.
   sed -i.bak "s#^$1=.*#$1=$2#" .env && rm -f .env.bak
@@ -19,15 +28,15 @@ if ! grep -Eq '^INSTANCE_SECRET=.+' .env; then
   set_env INSTANCE_SECRET "$(openssl rand -hex 32)"
 fi
 
-docker compose up -d --wait backend
+compose up -d --wait backend
 
 if ! grep -Eq '^CONVEX_ADMIN_KEY=.+' .env; then
-  admin_key=$(docker compose exec -T backend ./generate_admin_key.sh | tail -n 1 | tr -d '\r')
+  admin_key=$(compose exec -T backend ./generate_admin_key.sh | tail -n 1 | tr -d '\r')
   set_env CONVEX_ADMIN_KEY "$admin_key"
   echo "Generated admin key and saved it to .env."
 fi
 
-docker compose up -d --build
+compose up -d --build
 
 . ./.env
 echo
