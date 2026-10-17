@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="56" fill="#000"/>
+  <rect x="78" y="40" width="100" height="176" rx="18" fill="none" stroke="#fff" stroke-width="10"/>
+  <text x="128" y="128" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="34" fill="#fff">12:00</text>
+  <line x1="102" y1="152" x2="154" y2="152" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="128" cy="192" r="8" fill="none" stroke="#fff" stroke-width="5"/>
+</svg>
