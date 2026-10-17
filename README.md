@@ -161,7 +161,7 @@ The token is 32 random bytes; anyone who has the URL can change the line, so tre
 secret and use **Change address** on the dashboard if it leaks. nginx only forwards `POST` and
 `DELETE` with bodies up to 4 KB, and the backend accepts one request every 5 seconds per webhook.
 
-**Habitica** (`convex/habitica.ts`, card logic in `convex/habiticaCards.ts`) follows Habitica's own
+**Habitica** (`convex/kinds/habitica.ts`, card logic in `convex/habiticaCards.ts`) follows Habitica's own
 day: dailies come from its `isDue`, and the card expires when the day resets at your day-start
 hour. A daily whose reminder went off in the last hour comes first and moves the card to the top;
 overdue and due-today To-Dos come first; low health promotes the stats card. Your API Token is
