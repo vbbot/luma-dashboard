@@ -25,6 +25,8 @@ import {
 } from "./cards";
 import { decrypt, encrypt } from "./secrets";
 import { KINDS, kindOf } from "./kinds";
+import { PROVIDERS } from "./providers";
+import type { ProviderName } from "./providers/types";
 import {
   IntegrationError,
   type IntegrationKind,
@@ -78,7 +80,7 @@ function kindFor(integration: { kind: string }): IntegrationKind {
 
 // Random 32-byte token, base64url. Generated in actions: randomness inside
 // queries and mutations is seeded and must not be used for secrets.
-function newToken() {
+export function newToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")
@@ -89,13 +91,15 @@ function newToken() {
 // The public address a provider calls (http.ts); null unless the dashboard
 // is on HTTPS, since providers like Habitica cannot reach it otherwise.
 // Generic webhooks keep their original /hooks/<token> address.
-function hookUrl(kind: Kind, token: string) {
+export function hookUrl(kind: string, token: string) {
   const base = process.env.PUBLIC_URL?.replace(/\/+$/, "");
   if (!base || !base.startsWith("https://")) return null;
   return kind === "webhook" ? `${base}/hooks/${token}` : `${base}/hooks/${kind}/${token}`;
 }
 
-async function sealSecrets(kind: IntegrationKind, settings: Settings): Promise<Settings> {
+type HasSecrets = { secret?: string[] };
+
+export async function sealSecrets(kind: HasSecrets, settings: Settings): Promise<Settings> {
   const sealed = { ...settings };
   for (const field of kind.secret ?? []) {
     if (typeof sealed[field] === "string") sealed[field] = await encrypt(sealed[field] as string);
@@ -103,7 +107,7 @@ async function sealSecrets(kind: IntegrationKind, settings: Settings): Promise<S
   return sealed;
 }
 
-async function openSecrets(kind: IntegrationKind, settings: Settings): Promise<Settings> {
+export async function openSecrets(kind: HasSecrets, settings: Settings): Promise<Settings> {
   const open = { ...settings };
   for (const field of kind.secret ?? []) {
     if (typeof open[field] === "string") open[field] = await decrypt(open[field] as string);
@@ -112,13 +116,13 @@ async function openSecrets(kind: IntegrationKind, settings: Settings): Promise<S
 }
 
 // Settings the browser may see: everything but the secret fields.
-function publicSettings(kind: IntegrationKind, settings: Settings) {
+export function publicSettings(kind: HasSecrets, settings: Settings) {
   const shown = { ...settings };
   for (const field of kind.secret ?? []) delete shown[field];
   return shown;
 }
 
-function errorText(error: unknown) {
+export function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -200,6 +204,7 @@ export const list = query({
           label: integration.label,
           settings: publicSettings(kind, (integration.settings ?? {}) as Settings),
           editable: kind.editable ?? [],
+          connectionId: integration.connectionId,
           notify: integration.notify !== false,
           webhookToken: integration.kind === "webhook" ? integration.webhookToken : undefined,
           lastError: integration.lastError,
@@ -210,11 +215,20 @@ export const list = query({
 });
 
 export const add = action({
-  args: { accountNumber: v.string(), kind: kindValidator, settings: v.any() },
+  args: {
+    accountNumber: v.string(),
+    kind: kindValidator,
+    settings: v.any(),
+    // For kinds that use a connection (e.g. Habitica cards).
+    connectionId: v.optional(v.id("connections")),
+  },
   handler: async (
     ctx,
-    { accountNumber, kind: kindName, settings: input },
+    { accountNumber, kind: kindName, settings: input, connectionId },
   ): Promise<Id<"integrations">> => {
+    if ((KINDS[kindName].connection !== undefined) !== (connectionId !== undefined)) {
+      throw new Error(KINDS[kindName].connection ? "Connect the account first" : "Not available");
+    }
     const kind = KINDS[kindName];
     if (!(await ctx.runQuery(internal.integrations.canAdd, { accountNumber }))) {
       throw new Error(`An account can have at most ${MAX_INTEGRATIONS} integrations`);
@@ -239,6 +253,7 @@ export const add = action({
           settings: await sealSecrets(kind, settings),
           webhookToken,
           refreshes: kind.refresh !== undefined,
+          connectionId,
         },
       );
       // Show something straight away rather than at the next scheduled run.
@@ -414,9 +429,18 @@ export const insert = internalMutation({
     settings: v.any(),
     webhookToken: v.optional(v.string()),
     refreshes: v.boolean(),
+    connectionId: v.optional(v.id("connections")),
   },
-  handler: async (ctx, { accountNumber, kind, label, settings, webhookToken, refreshes }) => {
+  handler: async (
+    ctx,
+    { accountNumber, kind, label, settings, webhookToken, refreshes, connectionId },
+  ) => {
     const account = await requireAccount(ctx, accountNumber);
+    if (connectionId !== undefined) {
+      const connection = await ctx.db.get(connectionId);
+      if (connection === null || connection.accountId !== account._id)
+        throw new Error("Connection not found");
+    }
     const existing = await ctx.db
       .query("integrations")
       .withIndex("by_account", (q) => q.eq("accountId", account._id))
@@ -431,6 +455,7 @@ export const insert = internalMutation({
       label,
       settings,
       webhookToken,
+      connectionId,
       nextRunAt: refreshes ? Date.now() : undefined,
     });
   },
@@ -468,13 +493,25 @@ export const forRun = internalQuery({
   handler: async (ctx, { integrationId }) => {
     const integration = await ctx.db.get(integrationId);
     if (integration === null) return null;
+    const connection = integration.connectionId ? await ctx.db.get(integration.connectionId) : null;
     return {
       kind: integration.kind,
       settings: (integration.settings ?? {}) as Settings,
       failures: integration.failures ?? 0,
+      connection: connection
+        ? { provider: connection.provider, settings: connection.settings as Settings }
+        : null,
     };
   },
 });
+
+// The decrypted settings of the connection a run uses, if any.
+async function openConnection(stored: {
+  connection: { provider: ProviderName; settings: Settings } | null;
+}) {
+  if (stored.connection === null) return undefined;
+  return await openSecrets(PROVIDERS[stored.connection.provider], stored.connection.settings);
+}
 
 export const saveRefresh = internalMutation({
   args: {
@@ -537,6 +574,7 @@ async function refresh(ctx: ActionCtx, integrationId: Id<"integrations">) {
     const result = await kind.refresh({
       ctx,
       settings: await openSecrets(kind, stored.settings),
+      connection: await openConnection(stored),
       now,
     });
     await ctx.runMutation(internal.integrations.saveRefresh, { integrationId, ...result });
@@ -586,7 +624,8 @@ export const runAct = internalAction({
     if (kind.act === undefined) return;
     try {
       const settings = await openSecrets(kind, stored.settings);
-      await kind.act({ ctx, settings, now: Date.now(), pageId, actionId, undo });
+      const connection = await openConnection(stored);
+      await kind.act({ ctx, settings, connection, now: Date.now(), pageId, actionId, undo });
     } catch (error) {
       console.warn(`Lock screen action failed: ${errorText(error)}`);
     }
@@ -686,5 +725,45 @@ export const migrateGlances = internalMutation({
       await ctx.db.delete(glance._id);
     }
     return glances.length;
+  },
+});
+
+// Before connections: each Habitica card held its own credentials and
+// webhook. Moves them into one connection per Habitica account, which every
+// Habitica card then uses. Run at backend start; a no-op once done.
+export const migrateConnections = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let moved = 0;
+    for (const row of await ctx.db.query("integrations").collect()) {
+      const settings = (row.settings ?? {}) as Settings;
+      if (row.kind !== "habitica" || row.connectionId !== undefined || !settings.userId) continue;
+      const existing = (
+        await ctx.db
+          .query("connections")
+          .withIndex("by_account", (q) => q.eq("accountId", row.accountId))
+          .collect()
+      ).find((connection) => (connection.settings as Settings).userId === settings.userId);
+      const connectionId =
+        existing?._id ??
+        (await ctx.db.insert("connections", {
+          accountId: row.accountId,
+          provider: "habitica",
+          settings: {
+            userId: settings.userId,
+            apiToken: settings.apiToken,
+            webhookId: settings.webhookId,
+          },
+          // Habitica keeps calling the address it was given.
+          webhookToken: row.webhookToken,
+        }));
+      await ctx.db.patch(row._id, {
+        settings: { show: settings.show ?? "dailies" },
+        connectionId,
+        webhookToken: undefined,
+      });
+      moved++;
+    }
+    return moved;
   },
 });

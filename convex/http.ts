@@ -42,20 +42,22 @@ async function readBody(request: Request): Promise<{ payload: unknown; minutes: 
   return { payload, minutes };
 }
 
-const KINDS_WITH_HOOKS = ["webhook", "habitica"] as const;
-
-// /hooks/<token> is a generic webhook (its original address);
-// /hooks/<kind>/<token> is for providers such as Habitica.
+// /hooks/<token> and /hooks/webhook/<token>: a generic webhook card.
+// /hooks/habitica/<token>: Habitica telling a connection that tasks changed.
 const hook = httpAction(async (ctx, request) => {
   const parts = new URL(request.url).pathname.slice("/hooks/".length).split("/");
   const [kind, webhookToken] = parts.length === 1 ? ["webhook", parts[0]] : parts;
-  if (
-    parts.length > 2 ||
-    !(KINDS_WITH_HOOKS as readonly string[]).includes(kind) ||
-    !WEBHOOK_TOKEN_PATTERN.test(webhookToken)
-  ) {
+  if (parts.length > 2 || !WEBHOOK_TOKEN_PATTERN.test(webhookToken))
     return reply(404, "Unknown webhook");
+  if (kind === "habitica") {
+    if (request.method !== "POST") return reply(404, "Unknown webhook");
+    const result = await ctx.runMutation(internal.connections.inbound, {
+      provider: "habitica",
+      webhookToken,
+    });
+    return reply(result.status, result.error);
   }
+  if (kind !== "webhook") return reply(404, "Unknown webhook");
 
   let payload: unknown = null;
   let minutes = WEBHOOK_DEFAULT_MINUTES;
@@ -65,7 +67,7 @@ const hook = httpAction(async (ctx, request) => {
     ({ payload, minutes } = body);
   }
   const result = await ctx.runMutation(internal.integrations.inbound, {
-    kind: kind as (typeof KINDS_WITH_HOOKS)[number],
+    kind: "webhook",
     webhookToken,
     payload,
     minutes,

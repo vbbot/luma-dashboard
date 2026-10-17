@@ -33,6 +33,8 @@ export type RunInput<S extends Settings> = {
   // Secret fields already decrypted.
   settings: S;
   now: number;
+  // For kinds with `connection`: that connection's settings, decrypted.
+  connection?: Settings;
 };
 
 export type RefreshResult = {
@@ -61,6 +63,10 @@ export interface IntegrationKind<S extends Settings = Settings> {
 
   // Fields that may be changed after adding, e.g. weather units.
   editable?: (keyof S & string)[];
+
+  // A provider whose connection this kind's cards use (providers/), e.g.
+  // Habitica: added by picking a connection instead of entering credentials.
+  connection?: "habitica";
 
   // The name on the dashboard and, unless the card sets a title, the lock
   // screen header.

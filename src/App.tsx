@@ -8,18 +8,10 @@ import { Loading, Screen } from "./ui";
 import { LoginScreen } from "./screens/LoginScreen";
 import { CreateAccountScreen } from "./screens/CreateAccountScreen";
 import { HelpScreen, HomeScreen, PrivacyScreen } from "./screens/InfoScreens";
-import { HabiticaTasksScreen } from "./screens/HabiticaTasksScreen";
-import {
-  AddIntegrationScreen,
-  AddWeatherScreen,
-  AddHabiticaScreen,
-  AddWebhookScreen,
-  IntegrationScreen,
-  LockScreenScreen,
-} from "./screens/LockScreenScreens";
+import { LockScreenScreen } from "./screens/LockScreenScreens";
+import { ConnectionsScreen, HabiticaScreen } from "./screens/ConnectionsScreens";
 import { AddCategoryScreen, AddToolsScreen, ToolsScreen } from "./screens/ToolsScreens";
 import { AccountScreen } from "./screens/AccountScreen";
-import { MessageScreen } from "./screens/MessageScreen";
 import {
   StoreAppScreen,
   StoreCategoriesScreen,
@@ -91,31 +83,15 @@ function SignedIn({
   if (route === "/account") {
     return <AccountScreen accountNumber={accountNumber} onLogOut={logOut} />;
   }
-  if (route === "/message") {
-    return <MessageScreen accountNumber={accountNumber} />;
-  }
-  if (route === "/lockscreen") {
+  // Old addresses from before the Lock Screen page held everything.
+  if (route === "/message" || route.startsWith("/lockscreen")) {
     return <LockScreenScreen accountNumber={accountNumber} />;
   }
-  if (route === "/lockscreen/add") {
-    return <AddIntegrationScreen />;
+  if (route === "/connections") {
+    return <ConnectionsScreen accountNumber={accountNumber} />;
   }
-  if (route === "/lockscreen/add/weather") {
-    return <AddWeatherScreen accountNumber={accountNumber} />;
-  }
-  if (route === "/lockscreen/add/habitica") {
-    return <AddHabiticaScreen accountNumber={accountNumber} />;
-  }
-  if (route === "/lockscreen/add/webhook") {
-    return <AddWebhookScreen accountNumber={accountNumber} />;
-  }
-  const tasksFor = /^\/lockscreen\/i\/([^/]+)\/tasks$/.exec(route)?.[1];
-  if (tasksFor !== undefined) {
-    return <HabiticaTasksScreen accountNumber={accountNumber} integrationId={tasksFor} />;
-  }
-  const integrationId = /^\/lockscreen\/i\/([^/]+)$/.exec(route)?.[1];
-  if (integrationId !== undefined) {
-    return <IntegrationScreen accountNumber={accountNumber} integrationId={integrationId} />;
+  if (route === "/connections/habitica") {
+    return <HabiticaScreen accountNumber={accountNumber} />;
   }
   if (!route.startsWith("/tools") && !route.startsWith("/store")) {
     return <HomeScreen />;

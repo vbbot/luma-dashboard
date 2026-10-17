@@ -131,8 +131,10 @@ ignore those apps.
 
 ## Lock screen integrations
 
-**Lock Screen** on the dashboard holds the message shown above the lock screen clock and up to
-five integrations. Each integration produces a *card*: one line, or several pages you step through
+**Lock Screen** on the dashboard is laid out like the phone: a live preview, the message shown above
+the clock, and up to five cards under it, in order, each with its settings and a notification switch
+in place. **Connections** links accounts once, for every card that uses them: connect Habitica there,
+then add its Dailies, To-Dos, Habits or Stats cards from Lock Screen → Add card. Each integration produces a *card*: one line, or several pages you step through
 with ‹ › arrows, built from a small set of blocks (text, pairs, progress, live times) that Luma
 draws in its own style. Cards expire, so a phone that stops getting updates drops them by itself.
 Luma shows one at a time, in the order chosen on the dashboard: the arrows step through a card's
@@ -166,14 +168,17 @@ day: dailies come from its `isDue`, and the card expires when the day resets at 
 hour. A daily whose reminder went off in the last hour comes first and moves the card to the top;
 overdue and due-today To-Dos come first; low health promotes the stats card. Your API Token is
 encrypted with `INTEGRATIONS_KEY` (derived from `INSTANCE_SECRET`) and never leaves the server.
-The integration's **Tasks and reminders** page adds dailies, To-Dos and habits to Habitica and
-sets reminder times on dailies and To-Dos (`convex/habiticaTasks.ts`). Habitica's website cannot set
+**Connections → Habitica** manages your tasks: tabs for dailies, To-Dos and habits, quick add, and an
+editor for name, notes, due date and reminder times (`convex/habiticaTasks.ts`). Habitica's website cannot set
 reminders, only its phone apps; this writes the same `reminders` field, in your Habitica timezone.
 When the dashboard has an `https://` `PUBLIC_URL`, it registers a Habitica webhook pointing at
 `/hooks/habitica/<token>` and removes it again with the integration; without one, changes made in
 Habitica show up at the next 15-minute refresh.
 
-Each integration is a *kind* in [`convex/kinds/`](convex/kinds): an object implementing
+Accounts that several cards share are *providers* in [`convex/providers/`](convex/providers)
+(credentials, provider webhooks at `/hooks/<provider>/<token>`, dashboard operations), stored by
+[`convex/connections.ts`](convex/connections.ts); a kind that needs one declares `connection` and
+receives its settings. Each integration is a *kind* in [`convex/kinds/`](convex/kinds): an object implementing
 `IntegrationKind` ([`types.ts`](convex/kinds/types.ts)) with its settings validation, secret fields,
 label and any of `refresh`, `act` (lock screen long-press), `inbound` (provider webhooks at
 `/hooks/<kind>/<token>`), `onAdd` and `onRemove`. The shared machinery in

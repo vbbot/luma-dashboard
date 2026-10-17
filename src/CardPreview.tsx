@@ -126,3 +126,86 @@ export function CardPreview({ card }: { card: Card | null }) {
     </div>
   );
 }
+
+// The lock screen as Luma draws it: one card at a time, high relevance first;
+// the arrows step through a card's pages and on into the next card, and the
+// header (name, page, one dot per card) skips to the next card.
+export function DeckPreview({ cards }: { cards: Card[] }) {
+  const now = useNow();
+  const deck = cards
+    .filter((card) => isShowing(card, now))
+    .sort(
+      (a, b) =>
+        Number(b.relevance === "high" && (b.relevantUntil ?? Infinity) > now) -
+        Number(a.relevance === "high" && (a.relevantUntil ?? Infinity) > now),
+    );
+  const [position, setPosition] = useState<{ cardId?: string; pageId?: string }>({});
+
+  if (deck.length === 0) return <p className="phone-empty">No cards to show</p>;
+  const cardIndex = Math.max(
+    0,
+    deck.findIndex((card) => card.id === position.cardId),
+  );
+  const card = deck[cardIndex];
+  const pages = validPages(card, now);
+  const pageIndex = Math.max(
+    0,
+    pages.findIndex((page) => page.id === (position.pageId ?? card.paging?.start)),
+  );
+  const page = pages[pageIndex];
+  const paged = pages.length > 1;
+  const several = deck.length > 1;
+
+  const step = (delta: number) => {
+    const target = pageIndex + delta;
+    if (target >= 0 && target < pages.length) {
+      setPosition({ cardId: card.id, pageId: pages[target].id });
+    } else {
+      const next = deck[(cardIndex + delta + deck.length) % deck.length];
+      const nextPages = validPages(next, now);
+      setPosition({
+        cardId: next.id,
+        pageId: (delta > 0 ? nextPages[0] : nextPages[nextPages.length - 1]).id,
+      });
+    }
+  };
+  const header = [
+    card.title,
+    paged ? `${pageIndex + 1}/${card.paging?.total ?? pages.length}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const dots = several ? deck.map((_, index) => (index === cardIndex ? "●" : "○")).join(" ") : "";
+
+  return (
+    <div className="card-preview">
+      {(paged || several) && (
+        <button
+          className="card-header-button card-secondary"
+          disabled={!several}
+          onClick={() => setPosition({ cardId: deck[(cardIndex + 1) % deck.length].id })}
+        >
+          {header}
+          {dots && `   ${dots}`}
+        </button>
+      )}
+      <div className="card-row">
+        {(paged || several) && (
+          <button className="card-arrow" aria-label="Previous" onClick={() => step(-1)}>
+            ‹
+          </button>
+        )}
+        <div className="card-blocks">
+          {page.blocks.slice(0, card.size === "regular" ? 2 : 1).map((block, blockIndex) => (
+            <BlockView key={blockIndex} block={block} now={now} />
+          ))}
+        </div>
+        {(paged || several) && (
+          <button className="card-arrow" aria-label="Next" onClick={() => step(1)}>
+            ›
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

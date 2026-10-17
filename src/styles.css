@@ -609,3 +609,438 @@ button {
     height: 11rem;
   }
 }
+
+/* Settings pages ----------------------------------------------------------
+   One scale for every settings-style page: rows 1.35rem, details and labels
+   1.05rem, controls 2.9rem tall. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 2.6rem;
+  width: min(100%, 40rem);
+  /* Clear of the fixed footer. */
+  padding-bottom: 4rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.list-row {
+  border-bottom: 1px solid #262626;
+}
+
+.list-row-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 4.4rem;
+}
+
+.list-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.7rem 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.list-row-text:disabled {
+  cursor: default;
+}
+
+.list-row-title {
+  overflow: hidden;
+  font-size: 1.35rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row-detail {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 1.05rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row-trailing {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.list-row-chevron {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 1.8rem;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+
+.list-row-chevron-open {
+  transform: rotate(90deg);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.2rem 0 1.6rem;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.field-row > .input {
+  flex: 1;
+}
+
+.field-label {
+  min-width: 7rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.input {
+  width: 100%;
+  height: 2.9rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: #000;
+  color: var(--fg);
+  font: inherit;
+  font-size: 1.15rem;
+}
+
+.input:focus {
+  outline: 1px solid var(--fg);
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+select.input {
+  appearance: none;
+  padding-right: 2.4rem;
+  background: #000
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E")
+    no-repeat right 0.9rem center;
+}
+
+input[type="date"].input {
+  color-scheme: dark;
+}
+
+textarea.input {
+  height: auto;
+  min-height: 5.5rem;
+  padding: 0.7rem 0.9rem;
+  resize: vertical;
+}
+
+.input-time {
+  width: 6.5rem;
+  flex: none;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.9rem;
+  padding: 0 1.2rem;
+  border: 1px solid var(--border);
+  background: #000;
+  color: var(--fg);
+  font-size: 1.1rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--fg);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-primary {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: #000;
+}
+
+.btn-small {
+  height: 2.4rem;
+  padding: 0 0.9rem;
+  font-size: 1rem;
+}
+
+.text-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 1.05rem;
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  color: var(--fg);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.actions-spread {
+  justify-content: space-between;
+}
+
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 2.9rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid var(--muted);
+  border-radius: 1rem;
+  background: #000;
+  cursor: pointer;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 0.18rem;
+  left: 0.2rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: left 0.15s;
+}
+
+.switch-on {
+  border-color: var(--fg);
+  background: var(--fg);
+}
+
+.switch-on .switch-knob {
+  left: 1.5rem;
+  background: #000;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.4rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--border);
+  font-size: 1.05rem;
+}
+
+.chip-remove {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.chip-remove:hover {
+  color: var(--fg);
+}
+
+.tabs {
+  display: flex;
+  gap: 1.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.6rem 0 0.7rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.tab-active {
+  border-bottom-color: var(--fg);
+  color: var(--fg);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.form-error {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+/* The phone preview at the top of Lock Screen. */
+.phone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  align-self: center;
+  width: min(100%, 24rem);
+  aspect-ratio: 1080 / 1240;
+  padding: 1.4rem 1rem;
+  border: 1px solid #333;
+  border-radius: 1.6rem;
+}
+
+.phone-message {
+  max-width: 90%;
+  margin: 0;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.phone-clock {
+  margin: 0;
+  font-size: 4.2rem;
+  font-weight: 200;
+  line-height: 1;
+}
+
+.phone .card-preview {
+  width: 100%;
+  padding: 0;
+  border: 0;
+}
+
+.phone .card-primary {
+  font-size: 1.15rem;
+}
+
+.phone .card-secondary {
+  font-size: 0.95rem;
+}
+
+.phone .card-arrow {
+  flex-basis: 2rem;
+  font-size: 1.6rem;
+}
+
+.phone-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.card-header-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.input-auto {
+  width: auto;
+  flex: none;
+}
+
+.add-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.add-group-label {
+  min-width: 6rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.add-card {
+  padding-top: 1rem;
+  border-bottom: 1px solid #262626;
+}
+
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.field-row-spread {
+  justify-content: space-between;
+}
+
+.quick-add {
+  margin-top: 0.4rem;
+}
+
+.input-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.95rem;
+}

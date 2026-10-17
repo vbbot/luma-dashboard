@@ -158,3 +158,35 @@ export function newTaskBody(input: unknown, user: HabiticaUser, now: number, new
   }
   return task;
 }
+
+// The body for PUT /tasks/:id from the dashboard's task editor: only the
+// fields sent. An empty dueDate clears the To-Do's due date. Reminders are
+// handled separately (habiticaReminders), since they need ids.
+export function taskChanges(type: TaskType, input: unknown, user: HabiticaUser) {
+  const body = (input ?? {}) as Record<string, unknown>;
+  const changes: Record<string, unknown> = {};
+  if (body.text !== undefined) {
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (text === "" || text.length > 250)
+      throw new SettingsError("The task needs a name (up to 250 characters)");
+    changes.text = text;
+  }
+  if (body.notes !== undefined) {
+    const notes = typeof body.notes === "string" ? body.notes.trim() : "";
+    if (notes.length > 1000) throw new SettingsError("Notes can be up to 1000 characters");
+    changes.notes = notes;
+  }
+  if (body.dueDate !== undefined && type === "todo") {
+    changes.date =
+      body.dueDate === "" || body.dueDate === null
+        ? null
+        : new Date(fromLocal(parseDate(body.dueDate), user)).toISOString();
+  }
+  if (type === "habit" && (body.up !== undefined || body.down !== undefined)) {
+    const up = body.up !== false;
+    const down = body.down === true;
+    if (!up && !down) throw new SettingsError("A habit needs + or − (or both)");
+    Object.assign(changes, { up, down });
+  }
+  return changes;
+}

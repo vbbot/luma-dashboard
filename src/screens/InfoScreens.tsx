@@ -7,6 +7,7 @@ export function HomeScreen() {
       <nav className="menu">
         <MenuLink to="/tools">Tools</MenuLink>
         <MenuLink to="/lockscreen">Lock Screen</MenuLink>
+        <MenuLink to="/connections">Connections</MenuLink>
         <MenuLink to="/account">Account</MenuLink>
         <MenuLink to="/help">Help</MenuLink>
       </nav>
@@ -47,9 +48,10 @@ export function HelpScreen({ backTo }: { backTo: string }) {
         <h2>Lock Screen</h2>
         <p>
           Show a short message above the clock, for example if the phone is lost, and up to two
-          lines from integrations below it: the weather for a place, your Habitica tasks (step through
-          them with the arrows and long-press to complete one), or a webhook that anything (Home
-          Assistant, an iOS Shortcut, a script) can send text to. Needs Luma 2.0.23 or later
+          cards below it: the weather for a place, your Habitica tasks (step through them with the
+          arrows and long-press to complete one), or a webhook that anything (Home Assistant, an iOS
+          Shortcut, a script) can send text to. Connect Habitica under Connections first; you can
+          also add tasks and reminder times there. Needs Luma 2.0.23 or later
           for the integrations.
         </p>
       </article>

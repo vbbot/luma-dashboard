@@ -1,495 +1,257 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { navigate } from "../router";
-import { CopyIcon, Loading, MenuLink, PlusCircleIcon, Screen } from "../ui";
-import { CardPreview, isShowing } from "../CardPreview";
 import type { Card } from "../../convex/cards";
+import { DeckPreview, isShowing } from "../CardPreview";
+import { navigate } from "../router";
+import { ListRow, Loading, Page, Screen, Section, Switch, errorMessage } from "../ui";
+
+// Lock Screen: what the phone shows, laid out like it. A live preview, the
+// message above the clock, and the cards under it in order. Each card's few
+// settings open in place; "Add" offers everything available, including
+// cards for connected accounts (Connections).
 
 type Units = "celsius" | "fahrenheit";
 type HabiticaShow = "dailies" | "todos" | "habits" | "stats";
-
-const HABITICA_SHOW: { value: HabiticaShow; label: string }[] = [
-  { value: "dailies", label: "Dailies due today" },
-  { value: "todos", label: "To-Dos" },
-  { value: "habits", label: "Habits" },
-  { value: "stats", label: "Health, level and gold" },
-];
 type Place = { name: string; detail: string; latitude: number; longitude: number };
 
-const UNITS: { value: Units; label: string }[] = [
-  { value: "celsius", label: "Celsius" },
-  { value: "fahrenheit", label: "Fahrenheit" },
+const HABITICA_VIEWS: { value: HabiticaShow; label: string }[] = [
+  { value: "dailies", label: "Dailies" },
+  { value: "todos", label: "To-Dos" },
+  { value: "habits", label: "Habits" },
+  { value: "stats", label: "Stats" },
 ];
+
+const DURATIONS = [
+  { minutes: 60, label: "1 hour" },
+  { minutes: 60 * 24, label: "1 day" },
+  { minutes: 60 * 24 * 7, label: "1 week" },
+];
+
+const MAX_CARDS = 5;
 
 function webhookUrl(token: string) {
   return `${window.location.origin}/hooks/${token}`;
 }
 
-function cardSummary(card: Card | null) {
-  return isShowing(card) ? card.fallback : "Nothing to show";
+function useClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  return now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// Everything Luma shows on the lock screen: the message above the clock and
-// up to two integration lines below it.
-export function LockScreenScreen({ accountNumber }: { accountNumber: string }) {
-  const integrations = useQuery(api.integrations.list, { accountNumber });
-
+function PhonePreview({ message, cards }: { message: string | null; cards: Card[] }) {
+  const clock = useClock();
   return (
-    <Screen
-      title="Lock Screen"
-      backTo="/"
-      action={{ label: "Add integration", icon: <PlusCircleIcon />, to: "/lockscreen/add" }}
-    >
-      <div className="store-detail">
-        <a className="store-app" href="#/message">
-          <span className="store-app-name">Message</span>
-          <span className="store-app-sources">Above the clock, until it expires</span>
-        </a>
-        {integrations == null ? (
-          <Loading />
-        ) : (
-          <>
-            {integrations.map((integration) => (
-              <a
-                key={integration.integrationId}
-                className="store-app"
-                href={`#/lockscreen/i/${integration.integrationId}`}
-              >
-                <span className="store-app-name">{integration.label}</span>
-                <span className="store-app-sources">{cardSummary(integration.card)}</span>
-              </a>
-            ))}
-            <p className="muted store-summary">
-              {integrations.length === 0
-                ? "Add weather or a webhook with + to show a line under the clock."
-                : "Luma shows the first two integrations that have something to show, in this order, under the clock."}
-            </p>
-          </>
-        )}
-      </div>
-    </Screen>
+    <div className="phone" aria-label="Lock screen preview">
+      {message !== null && <p className="phone-message">{message}</p>}
+      <p className="phone-clock">{clock}</p>
+      <DeckPreview cards={cards} />
+    </div>
   );
 }
 
-export function AddIntegrationScreen() {
-  return (
-    <Screen title="Add" backTo="/lockscreen" centered>
-      <nav className="menu">
-        <MenuLink to="/lockscreen/add/weather">Weather</MenuLink>
-        <MenuLink to="/lockscreen/add/habitica">Habitica</MenuLink>
-        <MenuLink to="/lockscreen/add/webhook">Webhook</MenuLink>
-      </nav>
-    </Screen>
-  );
-}
-
-export function AddWeatherScreen({ accountNumber }: { accountNumber: string }) {
-  const searchPlaces = useAction(api.integrations.searchPlaces);
-  const addIntegration = useAction(api.integrations.add);
-  const [search, setSearch] = useState("");
-  const [places, setPlaces] = useState<Place[] | null>(null);
-  const [units, setUnits] = useState<Units>("celsius");
+function MessageSection({ accountNumber }: { accountNumber: string }) {
+  const current = useQuery(api.lockscreenMessages.getCurrentForDevice, { accountNumber });
+  const send = useMutation(api.lockscreenMessages.send);
+  const clear = useMutation(api.lockscreenMessages.clear);
+  const [text, setText] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState(DURATIONS[1].minutes);
   const [error, setError] = useState<string | null>(null);
+  const active = current != null && current.expiresAt > Date.now() ? current : null;
 
-  async function find(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      setPlaces(await searchPlaces({ accountNumber, query: search }));
+      await send({ accountNumber, text, durationMinutes });
+      setText("");
     } catch {
-      setError("Unable to search for places.");
-    }
-  }
-
-  async function add(place: Place) {
-    setError(null);
-    try {
-      await addIntegration({
-        accountNumber,
-        kind: "weather",
-        settings: {
-          place: place.name.slice(0, 30),
-          latitude: place.latitude,
-          longitude: place.longitude,
-          units,
-        },
-      });
-      navigate("/lockscreen");
-    } catch (caught) {
-      setError(
-        caught instanceof Error && /at most/.test(caught.message)
-          ? "This account already has the maximum number of integrations."
-          : "Unable to add the weather.",
-      );
+      setError("Unable to send the message.");
     }
   }
 
   return (
-    <Screen title="Weather" backTo="/lockscreen/add" centered>
-      <div className="form">
-        <form className="form" onSubmit={find}>
-          <input
-            className="field"
-            placeholder="Town or city"
-            aria-label="Town or city"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            autoFocus
+    <Section title="Message above the clock">
+      {active !== null ? (
+        <div className="actions actions-spread">
+          <span className="list-row-detail">
+            Showing until {new Date(active.expiresAt).toLocaleString()}
+          </span>
+          <button className="text-button" onClick={() => clear({ accountNumber })}>
+            Remove
+          </button>
+        </div>
+      ) : (
+        <form className="panel" onSubmit={submit}>
+          <textarea
+            className="input"
+            placeholder="e.g. If found, please call 07700 900000"
+            maxLength={280}
+            rows={2}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
           />
-          <select
-            className="field"
-            aria-label="Units"
-            value={units}
-            onChange={(event) => setUnits(event.target.value as Units)}
-          >
-            {UNITS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button className="button" type="submit" disabled={search.trim().length < 2}>
-            Search
-          </button>
+          <div className="actions">
+            <select
+              className="input input-auto"
+              aria-label="Show for"
+              value={durationMinutes}
+              onChange={(event) => setDurationMinutes(Number(event.target.value))}
+            >
+              {DURATIONS.map((duration) => (
+                <option key={duration.minutes} value={duration.minutes}>
+                  For {duration.label}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-primary" type="submit" disabled={text.trim() === ""}>
+              Show
+            </button>
+          </div>
+          {error !== null && <p className="form-error">{error}</p>}
         </form>
-        {places !== null && places.length === 0 && (
-          <p className="muted centered-text">No places found.</p>
-        )}
-        {places?.map((place) => (
-          <button
-            key={`${place.latitude},${place.longitude}`}
-            className="button button-secondary"
-            onClick={() => add(place)}
-          >
-            {place.name}
-            {place.detail !== "" && `, ${place.detail}`}
-          </button>
-        ))}
-        {error !== null && <p className="error">{error}</p>}
-        <p className="muted">
-          Shows e.g. “12° Cloudy · 15°/8°”, updated every 30 minutes. Weather data by{" "}
-          <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
-            Open-Meteo
-          </a>
-          .
-        </p>
-      </div>
-    </Screen>
+      )}
+    </Section>
   );
 }
 
-export function AddHabiticaScreen({ accountNumber }: { accountNumber: string }) {
-  const addIntegration = useAction(api.integrations.add);
-  const [userId, setUserId] = useState("");
-  const [apiToken, setApiToken] = useState("");
-  const [show, setShow] = useState<HabiticaShow>("dailies");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      const integrationId = await addIntegration({
-        accountNumber,
-        kind: "habitica",
-        settings: { userId, apiToken, show },
-      });
-      navigate(`/lockscreen/i/${integrationId}`);
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "";
-      setError(
-        /at most/.test(message)
-          ? "This account already has the maximum number of integrations."
-          : /rejected/.test(message)
-            ? "Habitica did not accept that User ID and API Token."
-            : /form xxxxxxxx/.test(message)
-              ? "The User ID and API Token both look like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx."
-              : "Unable to connect to Habitica.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Screen title="Habitica" backTo="/lockscreen/add" centered>
-      <form className="form" onSubmit={submit}>
-        <p className="muted">
-          Shows your Habitica tasks on the lock screen. Step through them with the arrows, and
-          long-press one to tick it off. Find both values in Habitica under Settings → Site Data
-          (API).
-        </p>
-        <input
-          className="field field-small"
-          placeholder="User ID"
-          aria-label="User ID"
-          autoComplete="off"
-          value={userId}
-          onChange={(event) => setUserId(event.target.value)}
-          autoFocus
-        />
-        <input
-          className="field field-small"
-          type="password"
-          placeholder="API Token"
-          aria-label="API Token"
-          autoComplete="off"
-          value={apiToken}
-          onChange={(event) => setApiToken(event.target.value)}
-        />
-        <select
-          className="field"
-          aria-label="Show"
-          value={show}
-          onChange={(event) => setShow(event.target.value as HabiticaShow)}
-        >
-          {HABITICA_SHOW.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <button
-          className="button"
-          type="submit"
-          disabled={submitting || userId.trim() === "" || apiToken.trim() === ""}
-        >
-          {submitting ? "Connecting…" : "Connect"}
-        </button>
-        {error !== null && <p className="error">{error}</p>}
-        <p className="muted">
-          The API Token is stored encrypted on this server and is never shown again or sent to your
-          phone. Add Habitica more than once to show, say, Dailies and To-Dos separately.
-        </p>
-      </form>
-    </Screen>
-  );
+function useIntegrations(accountNumber: string) {
+  return useQuery(api.integrations.list, { accountNumber });
 }
 
-export function AddWebhookScreen({ accountNumber }: { accountNumber: string }) {
-  const addIntegration = useAction(api.integrations.add);
-  const [label, setLabel] = useState("");
-  const [error, setError] = useState<string | null>(null);
+type Integration = NonNullable<ReturnType<typeof useIntegrations>>[number];
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      const integrationId = await addIntegration({
-        accountNumber,
-        kind: "webhook",
-        settings: { name: label },
-      });
-      navigate(`/lockscreen/i/${integrationId}`);
-    } catch (caught) {
-      setError(
-        caught instanceof Error && /at most/.test(caught.message)
-          ? "This account already has the maximum number of integrations."
-          : "Unable to add the webhook.",
-      );
-    }
-  }
-
-  return (
-    <Screen title="Webhook" backTo="/lockscreen/add" centered>
-      <form className="form" onSubmit={submit}>
-        <p className="muted">
-          A secret address that anything can send a line of text to, such as a Home Assistant
-          automation, an iOS Shortcut or a script.
-        </p>
-        <input
-          className="field"
-          placeholder="Name, e.g. Home"
-          aria-label="Name"
-          maxLength={40}
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-          autoFocus
-        />
-        <button className="button" type="submit" disabled={label.trim() === ""}>
-          Create
-        </button>
-        {error !== null && <p className="error">{error}</p>}
-      </form>
-    </Screen>
-  );
+function cardDetail(integration: Integration) {
+  if (integration.lastError) return `Last update failed: ${integration.lastError}`;
+  return isShowing(integration.card) ? integration.card.fallback : "Nothing to show right now";
 }
 
-export function IntegrationScreen({
+function CardSettings({
   accountNumber,
-  integrationId,
+  integration,
+  isFirst,
+  isLast,
 }: {
   accountNumber: string;
-  integrationId: string;
+  integration: Integration;
+  isFirst: boolean;
+  isLast: boolean;
 }) {
-  const integrations = useQuery(api.integrations.list, { accountNumber });
-  const remove = useMutation(api.integrations.remove);
-  const move = useMutation(api.integrations.move);
   const update = useMutation(api.integrations.update);
-  const setNotify = useMutation(api.integrations.setNotify);
+  const move = useMutation(api.integrations.move);
+  const remove = useMutation(api.integrations.remove);
   const rotateToken = useAction(api.integrations.rotateToken);
   const [error, setError] = useState<string | null>(null);
-
-  if (integrations == null) {
-    return (
-      <Screen backTo="/lockscreen" centered>
-        <Loading />
-      </Screen>
-    );
-  }
-  const index = integrations.findIndex((row) => row.integrationId === integrationId);
-  const integration = integrations[index];
-  if (integration === undefined) {
-    return (
-      <Screen backTo="/lockscreen" centered>
-        <p className="muted">This integration was removed.</p>
-      </Screen>
-    );
-  }
   const id = integration.integrationId as Id<"integrations">;
-  const card = isShowing(integration.card) ? integration.card : null;
+  const settings = integration.settings as Record<string, unknown>;
 
   async function run(task: () => Promise<unknown>, failure: string) {
     setError(null);
     try {
       await task();
-    } catch {
-      setError(failure);
+    } catch (caught) {
+      setError(errorMessage(caught, failure));
     }
   }
 
   return (
-    <Screen title={integration.label} backTo="/lockscreen" centered>
-      <div className="form">
-        <CardPreview card={integration.card} />
-        {card !== null && (
-          <p className="muted">Showing until {new Date(card.expiresAt).toLocaleString()}</p>
-        )}
-        {integration.lastError !== undefined && (
-          <p className="muted">Last update failed: {integration.lastError}</p>
-        )}
-
-        {integration.kind === "habitica" && (
-          <>
-            <select
-              className="field"
-              aria-label="Show"
-              value={integration.settings.show as HabiticaShow}
-              onChange={(event) =>
-                run(
-                  () =>
-                    update({
-                      accountNumber,
-                      integrationId: id,
-                      settings: { show: event.target.value as HabiticaShow },
-                    }),
-                  "Unable to change what it shows.",
-                )
-              }
-            >
-              {HABITICA_SHOW.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              className="button button-secondary"
-              onClick={() => navigate(`/lockscreen/i/${integration.integrationId}/tasks`)}
-            >
-              Tasks and reminders
-            </button>
-            <p className="muted">
-              Long-press a task on the lock screen to complete it; long-press “✓ Done” to undo.
-              Changes made in Habitica show up within seconds.
-            </p>
-          </>
-        )}
-
-        {integration.kind === "weather" && (
+    <>
+      {integration.kind === "weather" && (
+        <div className="field-row">
+          <span className="field-label">Units</span>
           <select
-            className="field"
-            aria-label="Units"
-            value={integration.settings.units as Units}
+            className="input"
+            value={settings.units as Units}
             onChange={(event) =>
               run(
                 () =>
                   update({
                     accountNumber,
                     integrationId: id,
-                    settings: { units: event.target.value as Units },
+                    settings: { units: event.target.value },
                   }),
                 "Unable to change the units.",
               )
             }
           >
-            {UNITS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
+            <option value="celsius">Celsius</option>
+            <option value="fahrenheit">Fahrenheit</option>
           </select>
-        )}
+        </div>
+      )}
 
-        {integration.kind === "webhook" && integration.webhookToken !== undefined && (
-          <>
-            <div className="field-group">
-              <span className="field field-static field-url">
-                {webhookUrl(integration.webhookToken)}
-              </span>
-              <button
-                className="field-button"
-                aria-label="Copy webhook address"
-                onClick={() => navigator.clipboard.writeText(webhookUrl(integration.webhookToken!))}
-              >
-                <CopyIcon />
-              </button>
-            </div>
-            <p className="muted">
-              POST up to 60 characters of text to show them for an hour. Or POST JSON: one line with{" "}
-              <code>{'{"text": "Bins out tonight", "minutes": 120}'}</code> (up to a week), several
-              to page through with{" "}
-              <code>{'{"title": "Windows open", "lines": ["Kitchen", "Bedroom"]}'}</code>, or a full
-              card (see the README). DELETE clears it. Anyone with the address can change what it
-              shows, so keep it private.
-            </p>
-            <pre className="code-block">{`curl -d "Bins out tonight" ${webhookUrl(integration.webhookToken)}`}</pre>
-            <button
-              className="button button-secondary"
-              onClick={() =>
+      {integration.kind === "habitica" && (
+        <>
+          <div className="field-row">
+            <span className="field-label">Shows</span>
+            <select
+              className="input"
+              value={settings.show as HabiticaShow}
+              onChange={(event) =>
                 run(
-                  () => rotateToken({ accountNumber, integrationId: id }),
-                  "Unable to change the address.",
+                  () =>
+                    update({
+                      accountNumber,
+                      integrationId: id,
+                      settings: { show: event.target.value },
+                    }),
+                  "Unable to change what it shows.",
                 )
               }
             >
-              Change address
+              {HABITICA_VIEWS.map((view) => (
+                <option key={view.value} value={view.value}>
+                  {view.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="hint">
+            Long-press a task on the lock screen to complete it, and again to undo.{" "}
+            <button className="text-button" onClick={() => navigate("/connections/habitica")}>
+              Manage tasks and reminders
             </button>
-          </>
-        )}
+          </p>
+        </>
+      )}
 
-        {(integration.kind === "habitica" || integration.kind === "webhook") && (
-          <button
-            className="button button-secondary"
-            onClick={() =>
-              run(
-                () => setNotify({ accountNumber, integrationId: id, notify: !integration.notify }),
-                "Unable to change notifications.",
-              )
-            }
-          >
-            Phone notifications: {integration.notify ? "On" : "Off"}
-          </button>
-        )}
+      {integration.kind === "webhook" && integration.webhookToken !== undefined && (
+        <>
+          <div className="field-row">
+            <input
+              className="input input-mono"
+              readOnly
+              aria-label="Webhook address"
+              value={webhookUrl(integration.webhookToken)}
+              onFocus={(event) => event.target.select()}
+            />
+            <button
+              className="btn"
+              onClick={() => navigator.clipboard.writeText(webhookUrl(integration.webhookToken!))}
+            >
+              Copy
+            </button>
+          </div>
+          <p className="hint">
+            POST text to show it for an hour, or JSON such as{" "}
+            <code>{'{"text": "…", "minutes": 120}'}</code> or{" "}
+            <code>{'{"title": "…", "lines": ["…", "…"]}'}</code>. DELETE clears it. Keep the address
+            private: anyone with it can change what this card shows.
+          </p>
+          <pre className="code-block">{`curl -d "Bins out tonight" ${webhookUrl(integration.webhookToken)}`}</pre>
+        </>
+      )}
 
-        <div className="button-row">
+      <div className="actions actions-spread">
+        <div className="actions">
           <button
-            className="button button-secondary"
-            disabled={index === 0}
+            className="btn btn-small"
+            disabled={isFirst}
             onClick={() =>
               run(
                 () => move({ accountNumber, integrationId: id, direction: "up" }),
@@ -500,8 +262,8 @@ export function IntegrationScreen({
             Move up
           </button>
           <button
-            className="button button-secondary"
-            disabled={index === integrations.length - 1}
+            className="btn btn-small"
+            disabled={isLast}
             onClick={() =>
               run(
                 () => move({ accountNumber, integrationId: id, direction: "down" }),
@@ -511,20 +273,285 @@ export function IntegrationScreen({
           >
             Move down
           </button>
+          {integration.kind === "webhook" && (
+            <button
+              className="btn btn-small"
+              onClick={() =>
+                run(
+                  () => rotateToken({ accountNumber, integrationId: id }),
+                  "Unable to change the address.",
+                )
+              }
+            >
+              New address
+            </button>
+          )}
         </div>
         <button
-          className="button button-secondary"
+          className="text-button"
           onClick={() =>
-            run(async () => {
-              await remove({ accountNumber, integrationId: id });
-              navigate("/lockscreen");
-            }, "Unable to remove the integration.")
+            run(() => remove({ accountNumber, integrationId: id }), "Unable to remove the card.")
           }
         >
-          Remove
+          Remove card
         </button>
-        {error !== null && <p className="error">{error}</p>}
       </div>
+      {error !== null && <p className="form-error">{error}</p>}
+    </>
+  );
+}
+
+function AddCard({ accountNumber, onDone }: { accountNumber: string; onDone: () => void }) {
+  const add = useAction(api.integrations.add);
+  const searchPlaces = useAction(api.integrations.searchPlaces);
+  const connections = useQuery(api.connections.list, { accountNumber });
+  const [choice, setChoice] = useState<"weather" | "webhook" | null>(null);
+  const [search, setSearch] = useState("");
+  const [places, setPlaces] = useState<Place[] | null>(null);
+  const [units, setUnits] = useState<Units>("celsius");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const habitica = connections?.find((connection) => connection.provider === "habitica");
+
+  async function run(task: () => Promise<unknown>, failure: string) {
+    setError(null);
+    try {
+      await task();
+      onDone();
+    } catch (caught) {
+      setError(errorMessage(caught, failure));
+    }
+  }
+
+  const choiceButton = (value: "weather" | "webhook", label: string) => (
+    <button
+      className={choice === value ? "btn btn-small btn-primary" : "btn btn-small"}
+      onClick={() => setChoice(choice === value ? null : value)}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="panel add-card">
+      <div className="add-group">
+        <span className="add-group-label">Card</span>
+        {choiceButton("weather", "Weather")}
+        {choiceButton("webhook", "Webhook")}
+      </div>
+      {habitica && (
+        <div className="add-group">
+          <span className="add-group-label">Habitica</span>
+          {HABITICA_VIEWS.map((view) => (
+            <button
+              key={view.value}
+              className="btn btn-small"
+              onClick={() =>
+                run(
+                  () =>
+                    add({
+                      accountNumber,
+                      kind: "habitica",
+                      settings: { show: view.value },
+                      connectionId: habitica.connectionId as Id<"connections">,
+                    }),
+                  "Unable to add the card.",
+                )
+              }
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {connections !== undefined && !habitica && (
+        <p className="hint">
+          Habitica cards appear here once you{" "}
+          <button className="text-button" onClick={() => navigate("/connections")}>
+            connect Habitica
+          </button>
+          .
+        </p>
+      )}
+
+      {choice === "weather" && (
+        <>
+          <form
+            className="field-row"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setError(null);
+              try {
+                setPlaces(await searchPlaces({ accountNumber, query: search }));
+              } catch {
+                setError("Unable to search for places.");
+              }
+            }}
+          >
+            <input
+              className="input"
+              placeholder="Town or city"
+              aria-label="Town or city"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              autoFocus
+            />
+            <select
+              className="input input-auto"
+              aria-label="Units"
+              value={units}
+              onChange={(event) => setUnits(event.target.value as Units)}
+            >
+              <option value="celsius">°C</option>
+              <option value="fahrenheit">°F</option>
+            </select>
+            <button className="btn" type="submit" disabled={search.trim().length < 2}>
+              Search
+            </button>
+          </form>
+          {places !== null && places.length === 0 && <p className="hint">No places found.</p>}
+          {places?.map((place) => (
+            <ListRow
+              key={`${place.latitude},${place.longitude}`}
+              title={place.name}
+              detail={place.detail}
+              onClick={() =>
+                run(
+                  () =>
+                    add({
+                      accountNumber,
+                      kind: "weather",
+                      settings: {
+                        place: place.name.slice(0, 30),
+                        latitude: place.latitude,
+                        longitude: place.longitude,
+                        units,
+                      },
+                    }),
+                  "Unable to add the weather.",
+                )
+              }
+            />
+          ))}
+          <p className="hint">Updated every 30 minutes. Weather data by Open-Meteo.</p>
+        </>
+      )}
+
+      {choice === "webhook" && (
+        <>
+          <form
+            className="field-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run(
+                () => add({ accountNumber, kind: "webhook", settings: { name } }),
+                "Unable to add the webhook.",
+              );
+            }}
+          >
+            <input
+              className="input"
+              placeholder="Name, e.g. Home"
+              aria-label="Name"
+              maxLength={40}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoFocus
+            />
+            <button className="btn" type="submit" disabled={name.trim() === ""}>
+              Create
+            </button>
+          </form>
+          <p className="hint">
+            A secret address that Home Assistant, a Shortcut or a script can send lines to.
+          </p>
+        </>
+      )}
+      {error !== null && <p className="form-error">{error}</p>}
+    </div>
+  );
+}
+
+export function LockScreenScreen({ accountNumber }: { accountNumber: string }) {
+  const integrations = useIntegrations(accountNumber);
+  const message = useQuery(api.lockscreenMessages.getCurrentForDevice, { accountNumber });
+  const setNotify = useMutation(api.integrations.setNotify);
+  const [open, setOpen] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const activeMessage = message != null && message.expiresAt > Date.now() ? message.text : null;
+
+  return (
+    <Screen title="Lock Screen" backTo="/">
+      <Page>
+        <PhonePreview
+          message={activeMessage}
+          cards={(integrations ?? []).flatMap((integration) =>
+            integration.card ? [integration.card as Card] : [],
+          )}
+        />
+
+        <MessageSection accountNumber={accountNumber} />
+
+        <Section
+          title="Cards under the clock"
+          action={
+            (integrations?.length ?? 0) < MAX_CARDS && (
+              <button className="text-button" onClick={() => setAdding(!adding)}>
+                {adding ? "Close" : "Add card"}
+              </button>
+            )
+          }
+        >
+          {adding && <AddCard accountNumber={accountNumber} onDone={() => setAdding(false)} />}
+          {integrations == null ? (
+            <Loading />
+          ) : integrations.length === 0 ? (
+            <p className="hint">No cards yet. Add weather, a webhook or Habitica.</p>
+          ) : (
+            integrations.map((integration, index) => (
+              <ListRow
+                key={integration.integrationId}
+                title={integration.label}
+                detail={cardDetail(integration)}
+                open={open === integration.integrationId}
+                onClick={() =>
+                  setOpen(open === integration.integrationId ? null : integration.integrationId)
+                }
+                trailing={
+                  (integration.kind === "habitica" || integration.kind === "webhook") && (
+                    <span className="switch-label">
+                      Notify
+                      <Switch
+                        label="Phone notifications"
+                        checked={integration.notify}
+                        onChange={(notify) =>
+                          setNotify({
+                            accountNumber,
+                            integrationId: integration.integrationId as Id<"integrations">,
+                            notify,
+                          })
+                        }
+                      />
+                    </span>
+                  )
+                }
+              >
+                <CardSettings
+                  accountNumber={accountNumber}
+                  integration={integration}
+                  isFirst={index === 0}
+                  isLast={index === integrations.length - 1}
+                />
+              </ListRow>
+            ))
+          )}
+          <p className="hint">
+            Luma shows one card at a time, in this order: the arrows step through a card and on to
+            the next, and tapping its name skips ahead. The switch turns phone notifications, such
+            as Habitica reminders, on or off for that card.
+          </p>
+        </Section>
+      </Page>
     </Screen>
   );
 }

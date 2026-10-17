@@ -4,6 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { androidApp, installedManagedApp } from "./schema";
 import { captchaPayload, requireCaptcha } from "./captcha";
 import { deleteIntegration } from "./integrations";
+import { deleteConnection } from "./connections";
 import {
   ACCOUNT_NUMBER_PATTERN,
   DEFAULT_TOOL_IDS,
@@ -364,6 +365,12 @@ export const remove = mutation({
       .collect();
     for (const integration of integrations) {
       await deleteIntegration(ctx, integration);
+    }
+    for (const connection of await ctx.db
+      .query("connections")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .collect()) {
+      await deleteConnection(ctx, connection._id);
     }
     await ctx.db.delete(account._id);
   },

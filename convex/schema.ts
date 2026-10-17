@@ -61,6 +61,20 @@ export default defineSchema({
     expiresAt: v.number(),
   }).index("by_account", ["accountId"]),
 
+  // Accounts linked once and shared by every card that uses them, e.g.
+  // Habitica (see connections.ts and providers/).
+  connections: defineTable({
+    accountId: v.id("accounts"),
+    provider: v.literal("habitica"),
+    // Provider settings; secret fields encrypted.
+    settings: v.any(),
+    // The token in the address the provider notifies (/hooks/<provider>/<token>).
+    webhookToken: v.optional(v.string()),
+    lastPushAt: v.optional(v.number()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_webhookToken", ["webhookToken"]),
+
   // Lock screen integrations an account has added (see integrations.ts).
   integrations: defineTable({
     accountId: v.id("accounts"),
@@ -69,6 +83,8 @@ export default defineSchema({
     order: v.number(),
     // Kind-specific settings (kinds/); secret fields encrypted.
     settings: v.optional(v.any()),
+    // For kinds that use a connection (e.g. Habitica cards).
+    connectionId: v.optional(v.id("connections")),
     // Phone notifications from this integration's cards; on unless false.
     notify: v.optional(v.boolean()),
     // Before kinds/: settings lived in these. Moved into `settings` by
@@ -106,7 +122,8 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_webhookToken", ["webhookToken"])
-    .index("by_nextRunAt", ["nextRunAt"]),
+    .index("by_nextRunAt", ["nextRunAt"])
+    .index("by_connection", ["connectionId"]),
 
   // What each integration currently shows. One per integration; `card` is
   // validated by cards.ts (format: docs/lockscreen-cards.md).
