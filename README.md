@@ -143,7 +143,7 @@ older Luma builds are handled are in [docs/lockscreen-cards.md](docs/lockscreen-
 |---|---|---|
 | Weather | `12° Cloudy · 15°/8°` for a chosen place, from [Open-Meteo](https://open-meteo.com) (no key) | Every 30 minutes by `integrations:refreshDue` (cron in `convex/crons.ts`); one request per place and unit, cached for 15 minutes across accounts. The place is sent rounded to about a kilometre. |
 | Webhook | Whatever is sent to its secret URL | On each request |
-| Habitica | Dailies due today, To-Dos, habits, or health/level/gold. Long-press a task to complete it (or `+1` a habit); long-press `✓ Done` to undo | Within seconds of changes in Habitica (its webhook), after every lock screen action, and every 15 minutes |
+| Habitica | Dailies due today, To-Dos, habits, or health/level/gold. Long-press a task to complete it (or `+1` a habit); long-press `✓ Done` to undo. Task reminders become phone notifications | Within seconds of changes in Habitica (its webhook), after every lock screen action, and every 15 minutes |
 
 Webhooks (`convex/http.ts`) accept plain text, or JSON with an optional lifetime (default an hour,
 up to a week): one line, several lines to page through, or a full card. `DELETE` clears it:
@@ -166,6 +166,9 @@ day: dailies come from its `isDue`, and the card expires when the day resets at 
 hour. A daily whose reminder went off in the last hour comes first and moves the card to the top;
 overdue and due-today To-Dos come first; low health promotes the stats card. Your API Token is
 encrypted with `INTEGRATIONS_KEY` (derived from `INSTANCE_SECRET`) and never leaves the server.
+The integration's **Tasks and reminders** page adds dailies, To-Dos and habits to Habitica and
+sets reminder times on dailies and To-Dos (`convex/habiticaTasks.ts`). Habitica's website cannot set
+reminders, only its phone apps; this writes the same `reminders` field, in your Habitica timezone.
 When the dashboard has an `https://` `PUBLIC_URL`, it registers a Habitica webhook pointing at
 `/hooks/habitica/<token>` and removes it again with the integration; without one, changes made in
 Habitica show up at the next 15-minute refresh.
@@ -176,7 +179,8 @@ label and any of `refresh`, `act` (lock screen long-press), `inbound` (provider 
 `/hooks/<kind>/<token>`), `onAdd` and `onRemove`. The shared machinery in
 [`convex/integrations.ts`](convex/integrations.ts) does the rest for every kind: encrypting secret
 settings, scheduling refreshes with backoff, validating and storing cards, the per-integration
-notification switch, running actions and routing webhooks. Adding an integration means writing a
+notification switch, running actions, routing webhooks, and dashboard `operations` (e.g. Habitica's
+task list) through `integrations:operate`. Adding an integration means writing a
 kind file and registering it in `kinds/index.ts`; Luma needs no change. Cards can carry phone
 notifications (see the spec), which Habitica uses for task reminders. Integrations
 that fetch user-supplied URLs are deliberately not included: anyone can create an account, so

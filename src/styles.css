@@ -206,6 +206,41 @@ button {
   font-size: 1.2rem;
 }
 
+.field[type="date"],
+.field[type="time"] {
+  color-scheme: dark;
+}
+
+.habitica-tasks {
+  width: min(100%, 36rem);
+}
+
+.habitica-task {
+  border-top: 1px solid var(--border);
+  padding-top: 0.8rem;
+}
+
+.habitica-task-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.habitica-task-row:disabled {
+  cursor: default;
+}
+
+.habitica-task-name {
+  font-size: 1.4rem;
+}
+
 .field-small {
   font-size: 1.1rem;
   letter-spacing: normal;

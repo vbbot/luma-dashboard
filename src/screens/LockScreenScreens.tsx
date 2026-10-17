@@ -397,6 +397,12 @@ export function IntegrationScreen({
                 </option>
               ))}
             </select>
+            <button
+              className="button button-secondary"
+              onClick={() => navigate(`/lockscreen/i/${integration.integrationId}/tasks`)}
+            >
+              Tasks and reminders
+            </button>
             <p className="muted">
               Long-press a task on the lock screen to complete it; long-press “✓ Done” to undo.
               Changes made in Habitica show up within seconds.

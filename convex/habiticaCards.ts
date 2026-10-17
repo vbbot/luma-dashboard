@@ -63,7 +63,7 @@ export class HabiticaError extends Error {
 export async function habiticaRequest<T>(
   userId: string,
   apiToken: string,
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -209,14 +209,15 @@ export function reminderNotifications(
         const at = Date.parse(date);
         if (!Number.isNaN(at) && localDay(at, user) === today + 1) dueDays.add(today + 1);
       }
-      for (const reminder of task.reminders) {
+      for (const [index, reminder] of task.reminders.entries()) {
         const todayAt = reminderToday(reminder, now, user);
         if (todayAt === null) continue;
         for (const day of dueDays) {
           const at = todayAt + (day - today) * DAY;
           if (at > now - NOTIFY_GRACE && at <= now + NOTIFY_HORIZON) {
             notifications.push({
-              id: `${task.id}:${reminder.id}:${day}`,
+              // Card ids are at most 64 characters: task, day and position.
+              id: `${task.id}:${day}:${index}`,
               at,
               title: title(task.text),
               text: "Habitica daily",
@@ -228,11 +229,11 @@ export function reminderNotifications(
         }
       }
     } else if (task.type === "todo") {
-      for (const reminder of task.reminders) {
+      for (const [index, reminder] of task.reminders.entries()) {
         const at = Date.parse(reminder.time);
         if (Number.isNaN(at) || at <= now - NOTIFY_GRACE || at > now + NOTIFY_HORIZON) continue;
         notifications.push({
-          id: `${task.id}:${reminder.id}`,
+          id: `${task.id}:${index}`,
           at,
           title: title(task.text),
           text: "Habitica to-do",

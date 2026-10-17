@@ -8,6 +8,7 @@ import { Loading, Screen } from "./ui";
 import { LoginScreen } from "./screens/LoginScreen";
 import { CreateAccountScreen } from "./screens/CreateAccountScreen";
 import { HelpScreen, HomeScreen, PrivacyScreen } from "./screens/InfoScreens";
+import { HabiticaTasksScreen } from "./screens/HabiticaTasksScreen";
 import {
   AddIntegrationScreen,
   AddWeatherScreen,
@@ -19,7 +20,12 @@ import {
 import { AddCategoryScreen, AddToolsScreen, ToolsScreen } from "./screens/ToolsScreens";
 import { AccountScreen } from "./screens/AccountScreen";
 import { MessageScreen } from "./screens/MessageScreen";
-import { StoreAppScreen, StoreCategoriesScreen, StoreCategoryScreen, storeCategoryPath } from "./screens/StoreScreens";
+import {
+  StoreAppScreen,
+  StoreCategoriesScreen,
+  StoreCategoryScreen,
+  storeCategoryPath,
+} from "./screens/StoreScreens";
 
 const CATEGORIES: ListCategory[] = ["light", "android"];
 
@@ -103,7 +109,11 @@ function SignedIn({
   if (route === "/lockscreen/add/webhook") {
     return <AddWebhookScreen accountNumber={accountNumber} />;
   }
-  const integrationId = /^\/lockscreen\/i\/(.+)$/.exec(route)?.[1];
+  const tasksFor = /^\/lockscreen\/i\/([^/]+)\/tasks$/.exec(route)?.[1];
+  if (tasksFor !== undefined) {
+    return <HabiticaTasksScreen accountNumber={accountNumber} integrationId={tasksFor} />;
+  }
+  const integrationId = /^\/lockscreen\/i\/([^/]+)$/.exec(route)?.[1];
   if (integrationId !== undefined) {
     return <IntegrationScreen accountNumber={accountNumber} integrationId={integrationId} />;
   }
@@ -125,7 +135,11 @@ function SignedIn({
   const storeCategory = /^\/store\/c\/(.+)$/.exec(route)?.[1];
   if (storeCategory !== undefined) {
     return (
-      <StoreCategoryScreen store={store} dashboard={dashboard} category={decodeURIComponent(storeCategory)} />
+      <StoreCategoryScreen
+        store={store}
+        dashboard={dashboard}
+        category={decodeURIComponent(storeCategory)}
+      />
     );
   }
   const storeAppId = /^\/store\/app\/(.+)$/.exec(route)?.[1];
@@ -148,7 +162,9 @@ function SignedIn({
   }
   const category = CATEGORIES.find((value) => route === `/tools/add/${value}`);
   if (category !== undefined) {
-    return <AddCategoryScreen accountNumber={accountNumber} dashboard={dashboard} category={category} />;
+    return (
+      <AddCategoryScreen accountNumber={accountNumber} dashboard={dashboard} category={category} />
+    );
   }
   return <ToolsScreen accountNumber={accountNumber} dashboard={dashboard} store={store} />;
 }

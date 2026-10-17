@@ -344,6 +344,38 @@ export const move = mutation({
   },
 });
 
+// A kind's dashboard operation (kinds/types.ts `operations`), e.g. adding a
+// Habitica task. Refreshes the card after anything that changes data.
+export const operate = action({
+  args: {
+    accountNumber: v.string(),
+    integrationId: v.id("integrations"),
+    operation: v.string(),
+    args: v.any(),
+  },
+  handler: async (ctx, { accountNumber, integrationId, operation, args }): Promise<unknown> => {
+    const stored = await ctx.runQuery(internal.integrations.forOwner, {
+      accountNumber,
+      integrationId,
+    });
+    if (stored === null) throw new Error("Integration not found");
+    const kind = kindFor(stored);
+    const handler = kind.operations?.[operation];
+    if (handler === undefined) throw new Error("Not available");
+    try {
+      const settings = await openSecrets(kind, stored.settings);
+      const result = await handler.run({ ctx, settings, now: Date.now(), args });
+      if (!handler.readOnly && kind.refresh) await refresh(ctx, integrationId);
+      return result ?? null;
+    } catch (error) {
+      if (error instanceof SettingsError || error instanceof IntegrationError) {
+        throw new Error(error.message);
+      }
+      throw error;
+    }
+  },
+});
+
 // For the weather setup screen.
 export const searchPlaces = action({
   args: { accountNumber: v.string(), query: v.string() },
@@ -415,6 +447,19 @@ export const replaceToken = internalMutation({
     // Providers that registered the old address (e.g. Habitica) would lose it.
     if (integration.kind !== "webhook") throw new Error("Only webhooks can change their address");
     await ctx.db.patch(integration._id, { webhookToken });
+  },
+});
+
+// forRun, for a dashboard caller: only the account's own integrations.
+export const forOwner = internalQuery({
+  args: { accountNumber: v.string(), integrationId: v.id("integrations") },
+  handler: async (ctx, { accountNumber, integrationId }) => {
+    const account = await findAccount(ctx, accountNumber);
+    const integration = await ctx.db.get(integrationId);
+    if (account === null || integration === null || integration.accountId !== account._id) {
+      return null;
+    }
+    return { kind: integration.kind, settings: (integration.settings ?? {}) as Settings };
   },
 });
 

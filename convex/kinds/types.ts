@@ -97,7 +97,19 @@ export interface IntegrationKind<S extends Settings = Settings> {
   // How often to refresh when the card does not say (and the base for
   // backoff after failures).
   refreshMs?: number;
+
+  // Things the dashboard can do with the provider beyond settings, e.g.
+  // listing or adding Habitica tasks. Called by integrations:operate with
+  // the integration's own settings; the card is refreshed after any that is
+  // not readOnly. `args` comes from the browser: validate it (throw
+  // SettingsError for a message the person sees).
+  operations?: Record<string, Operation<S>>;
 }
+
+export type Operation<S extends Settings> = {
+  readOnly?: boolean;
+  run(input: RunInput<S> & { args: unknown }): Promise<unknown>;
+};
 
 export function defineKind<S extends Settings>(kind: IntegrationKind<S>): IntegrationKind<S> {
   return kind;

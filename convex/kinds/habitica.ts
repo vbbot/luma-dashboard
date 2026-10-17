@@ -6,6 +6,13 @@ import {
   habiticaRequest,
   scoreDirection,
 } from "../habiticaCards";
+import {
+  dashboardTasks,
+  habiticaReminders,
+  newTaskBody,
+  toDashboardTask,
+  type TaskType,
+} from "../habiticaTasks";
 import { IntegrationError, SettingsError, defineKind } from "./types";
 
 // Habitica dailies, To-Dos, habits or stats; long-press scores a task, and
@@ -24,6 +31,8 @@ const LABELS: Record<HabiticaShow, string> = {
   habits: "Habitica · Habits",
   stats: "Habitica · Stats",
 };
+
+type HabiticaTaskResponse = Parameters<typeof toDashboardTask>[0];
 
 type HabiticaSettings = {
   userId: string;
@@ -133,6 +142,70 @@ export const habitica = defineKind<HabiticaSettings>({
     } catch (error) {
       throw failure(error);
     }
+  },
+
+  // The dashboard's Tasks section (habiticaTasks.ts).
+  operations: {
+    listTasks: {
+      readOnly: true,
+      async run({ settings }) {
+        try {
+          const { user, tasks } = await fetchHabitica(settings.userId, settings.apiToken);
+          return dashboardTasks(tasks, user);
+        } catch (error) {
+          throw failure(error);
+        }
+      },
+    },
+
+    // args: { type, text, notes?, dueDate? (To-Dos), reminders? (dailies and
+    // To-Dos), up?, down? (habits) }
+    addTask: {
+      async run({ settings, now, args }) {
+        try {
+          const { user } = await fetchHabitica(settings.userId, settings.apiToken);
+          const body = newTaskBody(args, user, now, () => crypto.randomUUID());
+          const created = await habiticaRequest<HabiticaTaskResponse>(
+            settings.userId,
+            settings.apiToken,
+            "POST",
+            "/tasks/user",
+            body,
+          );
+          return toDashboardTask(created, user);
+        } catch (error) {
+          throw failure(error);
+        }
+      },
+    },
+
+    // args: { taskId, reminders: [{ time, date? }] }; an empty list removes them.
+    setReminders: {
+      async run({ settings, now, args }) {
+        const { taskId, reminders } = (args ?? {}) as { taskId?: unknown; reminders?: unknown };
+        if (typeof taskId !== "string" || !UUID.test(taskId))
+          throw new SettingsError("Unknown task");
+        try {
+          const { user, tasks } = await fetchHabitica(settings.userId, settings.apiToken);
+          const task = tasks.find((entry) => entry.id === taskId);
+          if (task === undefined) throw new SettingsError("That task no longer exists");
+          const updated = await habiticaRequest<HabiticaTaskResponse>(
+            settings.userId,
+            settings.apiToken,
+            "PUT",
+            `/tasks/${encodeURIComponent(taskId)}`,
+            {
+              reminders: habiticaReminders(task.type as TaskType, reminders, user, now, () =>
+                crypto.randomUUID(),
+              ),
+            },
+          );
+          return toDashboardTask(updated, user);
+        } catch (error) {
+          throw failure(error);
+        }
+      },
+    },
   },
 
   async onRemove({ settings }) {

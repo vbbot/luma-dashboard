@@ -17,6 +17,7 @@ import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as glances from "../glances.js";
 import type * as habiticaCards from "../habiticaCards.js";
+import type * as habiticaTasks from "../habiticaTasks.js";
 import type * as http from "../http.js";
 import type * as integrations from "../integrations.js";
 import type * as kinds_habitica from "../kinds/habitica.js";
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   glances: typeof glances;
   habiticaCards: typeof habiticaCards;
+  habiticaTasks: typeof habiticaTasks;
   http: typeof http;
   integrations: typeof integrations;
   "kinds/habitica": typeof kinds_habitica;
