@@ -206,6 +206,11 @@ button {
   font-size: 1.2rem;
 }
 
+.field-small {
+  font-size: 1.1rem;
+  letter-spacing: normal;
+}
+
 .field-textarea {
   height: 8rem;
   padding: 1rem;

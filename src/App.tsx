@@ -11,6 +11,7 @@ import { HelpScreen, HomeScreen, PrivacyScreen } from "./screens/InfoScreens";
 import {
   AddIntegrationScreen,
   AddWeatherScreen,
+  AddHabiticaScreen,
   AddWebhookScreen,
   IntegrationScreen,
   LockScreenScreen,
@@ -95,6 +96,9 @@ function SignedIn({
   }
   if (route === "/lockscreen/add/weather") {
     return <AddWeatherScreen accountNumber={accountNumber} />;
+  }
+  if (route === "/lockscreen/add/habitica") {
+    return <AddHabiticaScreen accountNumber={accountNumber} />;
   }
   if (route === "/lockscreen/add/webhook") {
     return <AddWebhookScreen accountNumber={accountNumber} />;

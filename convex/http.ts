@@ -60,7 +60,17 @@ const hook = httpAction(async (ctx, request) => {
   return reply(result.status, result.error);
 });
 
+// Habitica's own webhook: a task changed there. The body is ignored (it is
+// not authenticated); the token says which integration to refresh.
+const habitica = httpAction(async (ctx, request) => {
+  const webhookToken = new URL(request.url).pathname.slice("/hooks/habitica/".length);
+  if (!WEBHOOK_TOKEN_PATTERN.test(webhookToken)) return reply(404, "Unknown webhook");
+  const known = await ctx.runMutation(internal.habitica.notified, { webhookToken });
+  return known ? reply(200, null) : reply(404, "Unknown webhook");
+});
+
 const http = httpRouter();
+http.route({ pathPrefix: "/hooks/habitica/", method: "POST", handler: habitica });
 http.route({ pathPrefix: "/hooks/", method: "POST", handler: hook });
 http.route({ pathPrefix: "/hooks/", method: "DELETE", handler: hook });
 export default http;

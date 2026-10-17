@@ -64,7 +64,7 @@ export default defineSchema({
   // Lock screen integrations an account has added (see integrations.ts).
   integrations: defineTable({
     accountId: v.id("accounts"),
-    kind: v.union(v.literal("weather"), v.literal("webhook")),
+    kind: v.union(v.literal("weather"), v.literal("webhook"), v.literal("habitica")),
     label: v.string(),
     order: v.number(),
     weather: v.optional(
@@ -74,6 +74,23 @@ export default defineSchema({
         units: v.union(v.literal("celsius"), v.literal("fahrenheit")),
       }),
     ),
+    habitica: v.optional(
+      v.object({
+        userId: v.string(),
+        // Encrypted with secrets.ts; never sent to the browser or phone.
+        apiToken: v.string(),
+        show: v.union(
+          v.literal("dailies"),
+          v.literal("todos"),
+          v.literal("habits"),
+          v.literal("stats"),
+        ),
+        // The webhook registered on Habitica so changes there arrive at once.
+        webhookId: v.optional(v.string()),
+      }),
+    ),
+    // Webhooks: the token in the address anything can POST to. Habitica: the
+    // token in the address Habitica notifies (/hooks/habitica/<token>).
     webhookToken: v.optional(v.string()),
     lastPushAt: v.optional(v.number()),
     // When the scheduler next refreshes it; unset for push-only kinds.
@@ -108,6 +125,15 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_integration", ["integrationId"]),
+
+  // Lock screen action requests already handled, so a retried press never
+  // runs twice. Kept for a day.
+  cardActions: defineTable({
+    requestId: v.string(),
+    expiresAt: v.number(),
+  })
+    .index("by_requestId", ["requestId"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   // Open-Meteo results shared by every integration at the same rounded spot.
   weatherCache: defineTable({

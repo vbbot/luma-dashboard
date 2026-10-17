@@ -36,6 +36,7 @@ import {
 //
 //   weather  Refreshed here every WEATHER_REFRESH_MS from Open-Meteo.
 //   webhook  Anything can POST a line or a card to its secret URL (http.ts).
+//   habitica Dailies, To-Dos, habits or stats from Habitica (habitica.ts).
 
 export const MAX_INTEGRATIONS = 5;
 export const MAX_LABEL_LENGTH = 40;
@@ -54,13 +55,13 @@ const WEBHOOK_MIN_INTERVAL_MS = 5_000;
 
 const units = v.union(v.literal("celsius"), v.literal("fahrenheit"));
 
-async function requireAccount(ctx: QueryCtx, accountNumber: string) {
+export async function requireAccount(ctx: QueryCtx, accountNumber: string) {
   const account = await findAccount(ctx, accountNumber);
   if (account === null) throw new Error("Account not found");
   return account;
 }
 
-async function requireIntegration(
+export async function requireIntegration(
   ctx: QueryCtx,
   accountNumber: string,
   integrationId: Id<"integrations">,
@@ -73,7 +74,7 @@ async function requireIntegration(
   return integration;
 }
 
-function cleanLabel(label: string) {
+export function cleanLabel(label: string) {
   const trimmed = label.trim();
   if (trimmed === "" || trimmed.length > MAX_LABEL_LENGTH) {
     throw new Error(`Name must be 1-${MAX_LABEL_LENGTH} characters`);
@@ -112,7 +113,7 @@ export function webhookContent(payload: unknown): CardContent {
   return validateContent(textContent(body.text), { allowActions: false });
 }
 
-async function insertIntegration(
+export async function insertIntegration(
   ctx: MutationCtx,
   account: Doc<"accounts">,
   fields: Omit<Doc<"integrations">, "_id" | "_creationTime" | "accountId" | "order">,
@@ -162,12 +163,17 @@ export async function setCard(
 
 export async function deleteIntegration(ctx: MutationCtx, integration: Doc<"integrations">) {
   await setCard(ctx, integration, null, 0);
+  if (integration.habitica?.webhookId !== undefined) {
+    // Stop Habitica notifying an address that no longer exists.
+    const { userId, apiToken, webhookId } = integration.habitica;
+    await ctx.scheduler.runAfter(0, internal.habitica.deleteWebhook, { userId, apiToken, webhookId });
+  }
   await ctx.db.delete(integration._id);
 }
 
 // Random 32-byte token, base64url. Generated in actions: randomness inside
 // queries and mutations is seeded and must not be used for secrets.
-function newWebhookToken() {
+export function newWebhookToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")
@@ -203,7 +209,8 @@ export const list = query({
           kind: integration.kind,
           label: integration.label,
           units: integration.weather?.units,
-          webhookToken: integration.webhookToken,
+          show: integration.habitica?.show,
+          webhookToken: integration.kind === "webhook" ? integration.webhookToken : undefined,
           lastError: integration.lastError,
           card: row ? (row.card as Card) : null,
         };
@@ -351,7 +358,9 @@ export const pushWebhook = internalMutation({
       .query("integrations")
       .withIndex("by_webhookToken", (q) => q.eq("webhookToken", webhookToken))
       .unique();
-    if (integration === null) return { status: 404, error: "Unknown webhook" };
+    if (integration === null || integration.kind !== "webhook") {
+      return { status: 404, error: "Unknown webhook" };
+    }
     const now = Date.now();
     if (
       integration.lastPushAt !== undefined &&

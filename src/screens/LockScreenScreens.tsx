@@ -8,6 +8,14 @@ import { CardPreview, isShowing } from "../CardPreview";
 import type { Card } from "../../convex/cards";
 
 type Units = "celsius" | "fahrenheit";
+type HabiticaShow = "dailies" | "todos" | "habits" | "stats";
+
+const HABITICA_SHOW: { value: HabiticaShow; label: string }[] = [
+  { value: "dailies", label: "Dailies due today" },
+  { value: "todos", label: "To-Dos" },
+  { value: "habits", label: "Habits" },
+  { value: "stats", label: "Health, level and gold" },
+];
 type Place = { name: string; detail: string; latitude: number; longitude: number };
 
 const UNITS: { value: Units; label: string }[] = [
@@ -70,6 +78,7 @@ export function AddIntegrationScreen() {
     <Screen title="Add" backTo="/lockscreen" centered>
       <nav className="menu">
         <MenuLink to="/lockscreen/add/weather">Weather</MenuLink>
+        <MenuLink to="/lockscreen/add/habitica">Habitica</MenuLink>
         <MenuLink to="/lockscreen/add/webhook">Webhook</MenuLink>
       </nav>
     </Screen>
@@ -168,6 +177,92 @@ export function AddWeatherScreen({ accountNumber }: { accountNumber: string }) {
   );
 }
 
+export function AddHabiticaScreen({ accountNumber }: { accountNumber: string }) {
+  const addHabitica = useAction(api.habitica.add);
+  const [userId, setUserId] = useState("");
+  const [apiToken, setApiToken] = useState("");
+  const [show, setShow] = useState<HabiticaShow>("dailies");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const integrationId = await addHabitica({ accountNumber, userId, apiToken, show });
+      navigate(`/lockscreen/i/${integrationId}`);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "";
+      setError(
+        /at most/.test(message)
+          ? "This account already has the maximum number of integrations."
+          : /rejected/.test(message)
+            ? "Habitica did not accept that User ID and API Token."
+            : /form xxxxxxxx/.test(message)
+              ? "The User ID and API Token both look like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx."
+              : "Unable to connect to Habitica.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Screen title="Habitica" backTo="/lockscreen/add" centered>
+      <form className="form" onSubmit={submit}>
+        <p className="muted">
+          Shows your Habitica tasks on the lock screen. Step through them with the arrows, and
+          long-press one to tick it off. Find both values in Habitica under Settings → Site Data
+          (API).
+        </p>
+        <input
+          className="field field-small"
+          placeholder="User ID"
+          aria-label="User ID"
+          autoComplete="off"
+          value={userId}
+          onChange={(event) => setUserId(event.target.value)}
+          autoFocus
+        />
+        <input
+          className="field field-small"
+          type="password"
+          placeholder="API Token"
+          aria-label="API Token"
+          autoComplete="off"
+          value={apiToken}
+          onChange={(event) => setApiToken(event.target.value)}
+        />
+        <select
+          className="field"
+          aria-label="Show"
+          value={show}
+          onChange={(event) => setShow(event.target.value as HabiticaShow)}
+        >
+          {HABITICA_SHOW.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button
+          className="button"
+          type="submit"
+          disabled={submitting || userId.trim() === "" || apiToken.trim() === ""}
+        >
+          {submitting ? "Connecting…" : "Connect"}
+        </button>
+        {error !== null && <p className="error">{error}</p>}
+        <p className="muted">
+          The API Token is stored encrypted on this server and is never shown again or sent to your
+          phone. Add Habitica more than once to show, say, Dailies and To-Dos separately.
+        </p>
+      </form>
+    </Screen>
+  );
+}
+
 export function AddWebhookScreen({ accountNumber }: { accountNumber: string }) {
   const addWebhook = useAction(api.integrations.addWebhook);
   const [label, setLabel] = useState("");
@@ -224,6 +319,7 @@ export function IntegrationScreen({
   const remove = useMutation(api.integrations.remove);
   const move = useMutation(api.integrations.move);
   const setWeatherUnits = useMutation(api.integrations.setWeatherUnits);
+  const setHabiticaShow = useMutation(api.habitica.setShow);
   const rotateWebhook = useAction(api.integrations.rotateWebhook);
   const [error, setError] = useState<string | null>(null);
 
@@ -264,6 +360,37 @@ export function IntegrationScreen({
         )}
         {integration.lastError !== undefined && (
           <p className="muted">Last update failed: {integration.lastError}</p>
+        )}
+
+        {integration.kind === "habitica" && (
+          <>
+            <select
+              className="field"
+              aria-label="Show"
+              value={integration.show}
+              onChange={(event) =>
+                run(
+                  () =>
+                    setHabiticaShow({
+                      accountNumber,
+                      integrationId: id,
+                      show: event.target.value as HabiticaShow,
+                    }),
+                  "Unable to change what it shows.",
+                )
+              }
+            >
+              {HABITICA_SHOW.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="muted">
+              Long-press a task on the lock screen to complete it; long-press “✓ Done” to undo.
+              Changes made in Habitica show up within seconds.
+            </p>
+          </>
         )}
 
         {integration.kind === "weather" && (

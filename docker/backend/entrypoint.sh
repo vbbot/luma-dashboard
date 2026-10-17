@@ -35,11 +35,15 @@ convex() {
 }
 
 echo "Deploying functions"
-# The login captcha signs its challenges with a key derived from the
-# instance secret, so it survives restarts without another setting.
+# Keys derived from the instance secret, so they survive restarts without
+# more settings: the login captcha signs its challenges with one, and
+# integration credentials (e.g. Habitica tokens) are encrypted with the other.
+# PUBLIC_URL is where Habitica sends its webhooks.
+derive() { printf '%s:%s' "$1" "$INSTANCE_SECRET" | sha256sum | cut -d' ' -f1; }
 if ! convex deploy --typecheck disable --codegen disable ||
-  ! convex env set ALTCHA_HMAC_KEY \
-    "$(printf 'altcha:%s' "$INSTANCE_SECRET" | sha256sum | cut -d' ' -f1)" >/dev/null; then
+  ! convex env set ALTCHA_HMAC_KEY "$(derive altcha)" >/dev/null ||
+  ! convex env set INTEGRATIONS_KEY "$(derive integrations)" >/dev/null ||
+  ! convex env set PUBLIC_URL "${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:3210}" >/dev/null; then
   kill -INT "$backend"
   exit 1
 fi
