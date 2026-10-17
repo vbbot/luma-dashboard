@@ -8,6 +8,13 @@ import { Loading, Screen } from "./ui";
 import { LoginScreen } from "./screens/LoginScreen";
 import { CreateAccountScreen } from "./screens/CreateAccountScreen";
 import { HelpScreen, HomeScreen, PrivacyScreen } from "./screens/InfoScreens";
+import {
+  AddIntegrationScreen,
+  AddWeatherScreen,
+  AddWebhookScreen,
+  IntegrationScreen,
+  LockScreenScreen,
+} from "./screens/LockScreenScreens";
 import { AddCategoryScreen, AddToolsScreen, ToolsScreen } from "./screens/ToolsScreens";
 import { AccountScreen } from "./screens/AccountScreen";
 import { MessageScreen } from "./screens/MessageScreen";
@@ -79,6 +86,22 @@ function SignedIn({
   }
   if (route === "/message") {
     return <MessageScreen accountNumber={accountNumber} />;
+  }
+  if (route === "/lockscreen") {
+    return <LockScreenScreen accountNumber={accountNumber} />;
+  }
+  if (route === "/lockscreen/add") {
+    return <AddIntegrationScreen />;
+  }
+  if (route === "/lockscreen/add/weather") {
+    return <AddWeatherScreen accountNumber={accountNumber} />;
+  }
+  if (route === "/lockscreen/add/webhook") {
+    return <AddWebhookScreen accountNumber={accountNumber} />;
+  }
+  const integrationId = /^\/lockscreen\/i\/(.+)$/.exec(route)?.[1];
+  if (integrationId !== undefined) {
+    return <IntegrationScreen accountNumber={accountNumber} integrationId={integrationId} />;
   }
   if (!route.startsWith("/tools") && !route.startsWith("/store")) {
     return <HomeScreen />;

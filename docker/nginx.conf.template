@@ -1,7 +1,8 @@
 # Public entry point. Serves the dashboard and proxies only the Convex sync
-# WebSocket, which is all Luma and the dashboard use. Every other /api/ path
-# (deploying code, exports, environment variables, ...) is refused here; the
-# admin UI reaches those through its own local-only proxy.
+# WebSocket, which is all Luma and the dashboard use, plus the lock screen
+# webhooks. Every other /api/ path (deploying code, exports, environment
+# variables, ...) is refused here; the admin UI reaches those through its own
+# local-only proxy.
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ""      close;
@@ -29,6 +30,19 @@ server {
 
     location /api/ {
         return 404;
+    }
+
+    # Lock screen webhooks (convex/http.ts), served by the backend's HTTP
+    # action port. Nothing else on that port is exposed.
+    location ~ ^/hooks/[A-Za-z0-9_-]+$ {
+        limit_except POST DELETE {
+            deny all;
+        }
+        client_max_body_size 4k;
+        proxy_pass http://${SITE_UPSTREAM};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location = /version {

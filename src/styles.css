@@ -320,6 +320,32 @@ button {
   text-align: center;
 }
 
+.field-url {
+  justify-content: flex-start;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: 1rem;
+  letter-spacing: normal;
+}
+
+.code-block {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.button-row {
+  display: flex;
+  gap: 1.1rem;
+}
+
+.button-row .button {
+  flex: 1;
+}
+
 .prose {
   width: min(100%, 44rem);
   font-size: 1.25rem;

@@ -6,7 +6,7 @@ export function HomeScreen() {
     <Screen title="Luma" centered>
       <nav className="menu">
         <MenuLink to="/tools">Tools</MenuLink>
-        <MenuLink to="/message">Message</MenuLink>
+        <MenuLink to="/lockscreen">Lock Screen</MenuLink>
         <MenuLink to="/account">Account</MenuLink>
         <MenuLink to="/help">Help</MenuLink>
       </nav>
@@ -44,8 +44,13 @@ export function HelpScreen({ backTo }: { backTo: string }) {
             once Luma has synced with this server.
           </li>
         </ul>
-        <h2>Message</h2>
-        <p>Show a short message on the phone's lock screen, for example if it is lost.</p>
+        <h2>Lock Screen</h2>
+        <p>
+          Show a short message above the clock, for example if the phone is lost, and up to two
+          lines from integrations below it: the weather for a place, or a webhook that anything
+          (Home Assistant, an iOS Shortcut, a script) can send text to. Needs Luma 2.0.23 or later
+          for the integrations.
+        </p>
       </article>
     </Screen>
   );
@@ -57,7 +62,7 @@ export function PrivacyScreen({ backTo }: { backTo: string }) {
       <article className="prose">
         <p>
           This dashboard is self-hosted. Everything it stores stays on the server it runs on and
-          is never shared with anyone else.
+          is never shared with anyone else, except as described for weather below.
         </p>
         <p>For each account the server stores:</p>
         <ul>
@@ -68,7 +73,19 @@ export function PrivacyScreen({ backTo }: { backTo: string }) {
             of launchable apps installed on it.
           </li>
           <li>Any lock screen message you send, until you replace or remove it.</li>
+          <li>
+            Your lock screen integrations: the place you chose for weather, webhook addresses, and
+            the line each one currently shows.
+          </li>
         </ul>
+        <p>
+          For weather, the server sends the place names you search for, and the place you choose
+          rounded to about a kilometre, to{" "}
+          <a href="https://open-meteo.com/en/terms" target="_blank" rel="noreferrer">
+            Open-Meteo
+          </a>
+          . Nothing identifying your account is sent with them.
+        </p>
         <p>Deleting your account removes all of this immediately.</p>
       </article>
     </Screen>

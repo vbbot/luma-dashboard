@@ -33,7 +33,7 @@ export function MessageScreen({ accountNumber }: { accountNumber: string }) {
   }
 
   return (
-    <Screen title="Lock Screen Message" backTo="/" centered>
+    <Screen title="Message" backTo="/lockscreen" centered>
       {current === undefined ? (
         <Loading />
       ) : (

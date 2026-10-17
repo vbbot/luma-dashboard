@@ -61,6 +61,53 @@ export default defineSchema({
     expiresAt: v.number(),
   }).index("by_account", ["accountId"]),
 
+  // Lock screen integrations an account has added (see integrations.ts).
+  integrations: defineTable({
+    accountId: v.id("accounts"),
+    kind: v.union(v.literal("weather"), v.literal("webhook")),
+    label: v.string(),
+    order: v.number(),
+    weather: v.optional(
+      v.object({
+        latitude: v.number(),
+        longitude: v.number(),
+        units: v.union(v.literal("celsius"), v.literal("fahrenheit")),
+      }),
+    ),
+    webhookToken: v.optional(v.string()),
+    lastPushAt: v.optional(v.number()),
+    // When the scheduler next refreshes it; unset for push-only kinds.
+    nextRunAt: v.optional(v.number()),
+    failures: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_webhookToken", ["webhookToken"])
+    .index("by_nextRunAt", ["nextRunAt"]),
+
+  // The line each integration currently shows. One per integration.
+  glances: defineTable({
+    integrationId: v.id("integrations"),
+    accountId: v.id("accounts"),
+    text: v.string(),
+    updatedAt: v.number(),
+    // Epoch ms. Luma hides the glance after this, so stale data disappears
+    // even if refreshes stop.
+    expiresAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_integration", ["integrationId"]),
+
+  // Open-Meteo results shared by every integration at the same rounded spot.
+  weatherCache: defineTable({
+    key: v.string(),
+    temperature: v.number(),
+    weatherCode: v.number(),
+    high: v.number(),
+    low: v.number(),
+    fetchedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   // App Store catalog, rebuilt by appStore:refresh from all sources.
   storeApps: defineTable(storeApp).index("by_appId", ["appId"]),
 

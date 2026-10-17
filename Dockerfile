@@ -14,8 +14,10 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.27-alpine AS web
-# host:port of the backend as seen from this container.
-ENV BACKEND_UPSTREAM=backend:3210
+# host:port of the backend API and its HTTP actions, as seen from this
+# container.
+ENV BACKEND_UPSTREAM=backend:3210 \
+    SITE_UPSTREAM=backend:3211
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/entrypoint.sh /docker-entrypoint.d/40-luma-config.sh
 RUN chmod +x /docker-entrypoint.d/40-luma-config.sh

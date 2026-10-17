@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { Doc } from "./_generated/dataModel";
 import { androidApp, installedManagedApp } from "./schema";
 import { captchaPayload, requireCaptcha } from "./captcha";
+import { deleteIntegration } from "./integrations";
 import {
   ACCOUNT_NUMBER_PATTERN,
   DEFAULT_TOOL_IDS,
@@ -356,6 +357,13 @@ export const remove = mutation({
       .collect();
     for (const row of [...devices, ...messages]) {
       await ctx.db.delete(row._id);
+    }
+    const integrations = await ctx.db
+      .query("integrations")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .collect();
+    for (const integration of integrations) {
+      await deleteIntegration(ctx, integration);
     }
     await ctx.db.delete(account._id);
   },

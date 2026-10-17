@@ -14,9 +14,13 @@ import type * as appStore from "../appStore.js";
 import type * as captcha from "../captcha.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
+import type * as glances from "../glances.js";
+import type * as http from "../http.js";
+import type * as integrations from "../integrations.js";
 import type * as lockscreenMessages from "../lockscreenMessages.js";
 import type * as managedApps from "../managedApps.js";
 import type * as storeSources from "../storeSources.js";
+import type * as weather from "../weather.js";
 
 import type {
   ApiFromModules,
@@ -31,9 +35,13 @@ declare const fullApi: ApiFromModules<{
   captcha: typeof captcha;
   catalog: typeof catalog;
   crons: typeof crons;
+  glances: typeof glances;
+  http: typeof http;
+  integrations: typeof integrations;
   lockscreenMessages: typeof lockscreenMessages;
   managedApps: typeof managedApps;
   storeSources: typeof storeSources;
+  weather: typeof weather;
 }>;
 
 /**

@@ -39,7 +39,7 @@ On every start the backend deploys the dashboard functions, so updating the imag
 
 | Service | Listens on | Purpose |
 |---|---|---|
-| `web` | `WEB_PORT` (8080), all interfaces | `PUBLIC_URL`. Serves the dashboard and proxies **only** the Convex sync WebSocket (`/api/sync` for Luma, `/api/<version>/sync` for the dashboard). Every other `/api/` path, such as deploying code or exporting data, returns 404. |
+| `web` | `WEB_PORT` (8080), all interfaces | `PUBLIC_URL`. Serves the dashboard and proxies **only** the Convex sync WebSocket (`/api/sync` for Luma, `/api/<version>/sync` for the dashboard) and lock screen webhooks (`POST`/`DELETE /hooks/<token>`). Every other `/api/` path, such as deploying code or exporting data, returns 404. |
 | `convex-admin` | `127.0.0.1:6791` only | Convex's admin UI, with a proxy to the full backend API. |
 | `backend` | not published | Reached only through the two containers above. |
 
@@ -74,12 +74,13 @@ Set `IMAGE_TAG` in `.env` to a release such as `0.1.0` to pin a version instead 
 | Image | Contents |
 |---|---|
 | `ghcr.io/vbbot/luma-dashboard-backend` | Convex backend (built from the pinned [release binary](https://github.com/get-convex/convex-backend/releases)) plus `convex/` |
-| `ghcr.io/vbbot/luma-dashboard-web` | The built frontend on nginx, proxying the sync WebSocket to `BACKEND_UPSTREAM` (default `backend:3210`). Has no URL baked in, so one image works for any deployment. |
+| `ghcr.io/vbbot/luma-dashboard-web` | The built frontend on nginx, proxying the sync WebSocket to `BACKEND_UPSTREAM` (default `backend:3210`) and webhooks to `SITE_UPSTREAM` (default `backend:3211`). Has no URL baked in, so one image works for any deployment. |
 | `ghcr.io/vbbot/luma-dashboard-convex-admin` | Convex's admin UI from the same release, proxying the full API to `BACKEND_UPSTREAM` |
 
 All are built for `linux/amd64` and `linux/arm64` by
 [`.github/workflows/docker.yml`](.github/workflows/docker.yml): pushes to `main` publish
-`latest`, and tags like `v0.1.0` publish `0.1.0` and `0.1`.
+`latest`, tags like `v0.1.0` publish `0.1.0` and `0.1`, and pushes to any other branch publish an
+image tagged with the branch name for testing (e.g. `IMAGE_TAG=integrations` in `.env`).
 
 To build them from a checkout instead:
 
@@ -126,6 +127,38 @@ backend starts and every hour:
 Apps with no APK in their latest release (or no release at all) are listed but can't be added.
 Adding an App Store app beyond Vandam's needs a Luma build with App Store support; older builds
 ignore those apps.
+
+## Lock screen integrations
+
+**Lock Screen** on the dashboard holds the message shown above the lock screen clock and up to
+five integrations. Luma 2.0.23+ shows the first two that have something to show, one line each,
+under the clock. Each integration produces a *glance*: up to 60 characters with an expiry, so a
+phone that stops getting updates drops old lines by itself.
+
+| Integration | Line | Updated |
+|---|---|---|
+| Weather | `12° Cloudy · 15°/8°` for a chosen place, from [Open-Meteo](https://open-meteo.com) (no key) | Every 30 minutes by `integrations:refreshDue` (cron in `convex/crons.ts`); one request per place and unit, cached for 15 minutes across accounts. The place is sent rounded to about a kilometre. |
+| Webhook | Whatever is sent to its secret URL | On each request |
+
+Webhooks (`convex/http.ts`) accept plain text, or JSON with an optional lifetime (default an hour,
+up to a week), and `DELETE` clears the line:
+
+```sh
+curl -d "Bins out tonight" https://luma.example.com/hooks/<token>
+curl -H "Content-Type: application/json" \
+  -d '{"text": "Parcel arriving", "minutes": 120}' https://luma.example.com/hooks/<token>
+curl -X DELETE https://luma.example.com/hooks/<token>
+```
+
+The token is 32 random bytes; anyone who has the URL can change the line, so treat it as a
+secret and use **Change address** on the dashboard if it leaks. nginx only forwards `POST` and
+`DELETE` with bodies up to 4 KB, and the backend accepts one request every 5 seconds per webhook.
+
+New integrations are added in `convex/integrations.ts`: store their settings on the
+`integrations` row and write their line with `setGlance`. Luma needs no change. Integrations
+that fetch user-supplied URLs are deliberately not included: anyone can create an account, so
+they would let strangers make the server request arbitrary addresses, including ones on its own
+network.
 
 ## Accounts
 
@@ -237,6 +270,16 @@ returns: { messageId: string; text: string; expiresAt: number /* epoch ms */ } |
 
 The phone hides the message once `expiresAt` has passed, so the query does not need to check the
 current time.
+
+### `glances:getForDevice`
+
+```ts
+args:    { accountNumber: string }
+returns: { glanceId: string; text: string; expiresAt: number /* epoch ms */ }[]
+```
+
+The lines from lock screen integrations, in the order chosen on the dashboard. Luma 2.0.23+ drops
+expired ones and shows the first two under the clock. Older versions do not call it.
 
 ### `managedApps:getReleaseVersions`
 
