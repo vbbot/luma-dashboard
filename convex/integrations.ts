@@ -146,8 +146,12 @@ export async function setCard(
     if (existing) await ctx.db.delete(existing._id);
     return;
   }
+  const valid = validateContent(content, { allowActions: integration.kind !== "webhook" });
   const card: Card = {
-    ...validateContent(content, { allowActions: integration.kind !== "webhook" }),
+    ...valid,
+    // Luma shows one integration at a time under a header, so every card
+    // needs a name; the integration's own label unless the card sets one.
+    title: valid.title ?? integration.label.slice(0, LIMITS.title),
     id: integration._id,
     schema: CARD_SCHEMA,
     updatedAt: Date.now(),

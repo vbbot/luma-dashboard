@@ -66,24 +66,27 @@ rewriting the card every minute.
 
 ## Layout
 
-Below the clock Luma has **4 rows**. It takes cards in the dashboard's order, with `high`
-relevance cards first, skipping expired cards and cards with no page valid now:
+Luma shows **one integration at a time** under the clock: the Light Phone III (1080×1240 at
+480 dpi) has room for the message or date, the clock and one card. The cards that have something
+to show form a deck, in the dashboard's order with `high` relevance cards first, skipping expired
+cards and cards with no page valid now. Each wake starts on the first card of the deck.
 
-- `regular` takes 2 rows, `compact` 1: a regular page draws its first two blocks, a compact page
-  its first. A paged card's header (title and position) is drawn smaller on top. At most 2 cards.
-- A card that no longer fits is drawn as its `fallback` in 1 row, if one row is left.
-- Pages with more than one valid page get `‹ ›` arrows at the screen edges. Arrows wrap around and
-  are hidden whenever the lock screen is not interactive.
-
-Blocks draw as: `text` primary at the regular size, secondary smaller and dimmer; `pair` as one row
-with the right part aligned right; `progress` as `label 2/5` with a thin bar; `time` as text.
+- The message or date, the clock and the card are centred together between the status bar and the
+  home button, so the clock moves up to make room; without a card it stays in the middle.
+- A header shows the card's `title` (the integration's name when the card sets none), the page
+  position for paged cards (`Dailies · 1/3`) and one dot per integration (`● ○`).
+- Luma measures the space left and draws the card as large as fits: every block (a `regular` page
+  draws its first two blocks, a `compact` page its first), then the header and first block, then
+  the one-line `fallback`, then nothing. Nothing ever overlaps the home button.
+- Arrows are hidden whenever the lock screen is not interactive.
 
 ## Gestures
 
 | Gesture | Effect |
 |---|---|
-| Tap `‹` / `›` | Previous / next page, with a light haptic |
-| Tap the card | Opens `open`, if set, and dismisses the lock screen |
+| Tap `‹` / `›` | Previous / next page; past either end, the previous / next integration (its last / first page), wrapping round. With a light haptic |
+| Tap the header | Skip to the next integration's first page |
+| Tap the card | Opens `open`, if set, and dismisses the lock screen. On a one-line fallback, skips to the next integration instead |
 | Long-press the card | Runs `primary`: the page shows `pendingText` (with "Long-press to undo" when `undo`) for 4 seconds, even if an update removes the page meanwhile, then the next page. Long-press again in that time to undo. Redraws wait while a finger is down, so updates never cancel a press |
 
 ## Transport

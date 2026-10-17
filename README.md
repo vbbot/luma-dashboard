@@ -135,7 +135,8 @@ ignore those apps.
 five integrations. Each integration produces a *card*: one line, or several pages you step through
 with ‹ › arrows, built from a small set of blocks (text, pairs, progress, live times) that Luma
 draws in its own style. Cards expire, so a phone that stops getting updates drops them by itself.
-Luma shows at most two, in the order chosen on the dashboard. The format, its limits and how
+Luma shows one at a time, in the order chosen on the dashboard: the arrows step through a card's
+pages and on into the next integration, and tapping the card's header skips to the next one. The format, its limits and how
 older Luma builds are handled are in [docs/lockscreen-cards.md](docs/lockscreen-cards.md).
 
 | Integration | Line | Updated |
