@@ -7,7 +7,7 @@
 // minutes behind UTC like JavaScript's getTimezoneOffset). Dailies carry
 // isDue for the current Habitica day.
 
-import type { Block, CardContent, Page } from "./cards";
+import type { Block, CardContent, CardNotification, Page } from "./cards";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -29,6 +29,8 @@ export type HabiticaTask = {
   completed?: boolean;
   isDue?: boolean;
   date?: string | null;
+  // Dailies: the next dates it is due (ISO), from Habitica.
+  nextDue?: string[];
   up?: boolean;
   down?: boolean;
   counterUp?: number;
@@ -176,6 +178,71 @@ function dueText(date: string, now: number, user: HabiticaUser) {
   if (days === 1) return "Due tomorrow";
   const wall = new Date(local(due, user));
   return `Due ${WEEKDAYS[wall.getUTCDay()]} ${wall.getUTCDate()} ${MONTHS[wall.getUTCMonth()]}`;
+}
+
+// --- Notifications ----------------------------------------------------------
+
+const NOTIFY_HORIZON = 48 * 60 * MINUTE;
+// A reminder stays listed this long after its time, so a phone checking at
+// fire time (checkFirst) still finds it while the task is open.
+const NOTIFY_GRACE = 10 * MINUTE;
+
+// Reminders for the phone to schedule (Luma fires them itself, offline too).
+// Dailies: today's occurrences of tasks still due and not done, and
+// tomorrow's for dailies due tomorrow, so an early reminder still fires if
+// the phone sleeps through the day reset. To-Dos: their dated reminders.
+// Only open tasks get reminders, so with checkFirst the phone notifies only if
+// the task is still open when the time comes.
+export function reminderNotifications(
+  tasks: HabiticaTask[],
+  user: HabiticaUser,
+  now: number,
+): CardNotification[] {
+  const today = localDay(now, user);
+  const notifications: CardNotification[] = [];
+  for (const task of tasks) {
+    if (task.completed || !task.reminders?.length) continue;
+    if (task.type === "daily") {
+      const dueDays = new Set<number>();
+      if (task.isDue) dueDays.add(today);
+      for (const date of task.nextDue ?? []) {
+        const at = Date.parse(date);
+        if (!Number.isNaN(at) && localDay(at, user) === today + 1) dueDays.add(today + 1);
+      }
+      for (const reminder of task.reminders) {
+        const todayAt = reminderToday(reminder, now, user);
+        if (todayAt === null) continue;
+        for (const day of dueDays) {
+          const at = todayAt + (day - today) * DAY;
+          if (at > now - NOTIFY_GRACE && at <= now + NOTIFY_HORIZON) {
+            notifications.push({
+              id: `${task.id}:${reminder.id}:${day}`,
+              at,
+              title: title(task.text),
+              text: "Habitica daily",
+              pageId: task.id,
+              until: nextDayStart(at, user),
+              checkFirst: true,
+            });
+          }
+        }
+      }
+    } else if (task.type === "todo") {
+      for (const reminder of task.reminders) {
+        const at = Date.parse(reminder.time);
+        if (Number.isNaN(at) || at <= now - NOTIFY_GRACE || at > now + NOTIFY_HORIZON) continue;
+        notifications.push({
+          id: `${task.id}:${reminder.id}`,
+          at,
+          title: title(task.text),
+          text: "Habitica to-do",
+          pageId: task.id,
+          checkFirst: true,
+        });
+      }
+    }
+  }
+  return notifications.sort((a, b) => a.at - b.at).slice(0, 20);
 }
 
 // --- Cards ------------------------------------------------------------------
@@ -391,6 +458,28 @@ function statsCard(user: HabiticaUser, now: number): HabiticaCard {
 }
 
 export function buildHabiticaCard(
+  show: HabiticaShow,
+  tasks: HabiticaTask[],
+  user: HabiticaUser,
+  now: number,
+): HabiticaCard {
+  const card = buildCard(show, tasks, user, now);
+  // Tapping a reminder opens its task, if today's card has it (tomorrow's
+  // reminders may be for tasks not on it yet).
+  const pageIds = new Set(card.content.pages.map((page) => page.id));
+  const wanted = show === "dailies" ? "Habitica daily" : show === "todos" ? "Habitica to-do" : null;
+  if (wanted !== null) {
+    const notifications = reminderNotifications(tasks, user, now)
+      .filter((item) => item.text === wanted)
+      .map((item) =>
+        item.pageId && pageIds.has(item.pageId) ? item : { ...item, pageId: undefined },
+      );
+    if (notifications.length > 0) card.content.notifications = notifications;
+  }
+  return card;
+}
+
+function buildCard(
   show: HabiticaShow,
   tasks: HabiticaTask[],
   user: HabiticaUser,

@@ -16,16 +16,21 @@ import type * as cards from "../cards.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as glances from "../glances.js";
-import type * as habitica from "../habitica.js";
 import type * as habiticaCards from "../habiticaCards.js";
 import type * as http from "../http.js";
 import type * as integrations from "../integrations.js";
+import type * as kinds_habitica from "../kinds/habitica.js";
+import type * as kinds_index from "../kinds/index.js";
+import type * as kinds_types from "../kinds/types.js";
+import type * as kinds_weather from "../kinds/weather.js";
+import type * as kinds_webhook from "../kinds/webhook.js";
 import type * as lockscreen from "../lockscreen.js";
 import type * as lockscreenMessages from "../lockscreenMessages.js";
 import type * as managedApps from "../managedApps.js";
 import type * as secrets from "../secrets.js";
 import type * as storeSources from "../storeSources.js";
 import type * as weather from "../weather.js";
+import type * as weatherCache from "../weatherCache.js";
 
 import type {
   ApiFromModules,
@@ -42,16 +47,21 @@ declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
   crons: typeof crons;
   glances: typeof glances;
-  habitica: typeof habitica;
   habiticaCards: typeof habiticaCards;
   http: typeof http;
   integrations: typeof integrations;
+  "kinds/habitica": typeof kinds_habitica;
+  "kinds/index": typeof kinds_index;
+  "kinds/types": typeof kinds_types;
+  "kinds/weather": typeof kinds_weather;
+  "kinds/webhook": typeof kinds_webhook;
   lockscreen: typeof lockscreen;
   lockscreenMessages: typeof lockscreenMessages;
   managedApps: typeof managedApps;
   secrets: typeof secrets;
   storeSources: typeof storeSources;
   weather: typeof weather;
+  weatherCache: typeof weatherCache;
 }>;
 
 /**

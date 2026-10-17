@@ -4,7 +4,7 @@ import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { findAccount } from "./accounts";
 import { type Card, forClient } from "./cards";
-import { scoreDirection } from "./habiticaCards";
+import { kindOf } from "./kinds";
 
 const ACTION_MEMORY_MS = 24 * 60 * 60_000;
 
@@ -64,6 +64,7 @@ export const act = mutation({
     if (integration === null || integration.accountId !== account._id) {
       throw new Error("Card not found");
     }
+    if (!kindOf(integration.kind)?.allowActions) throw new Error("Action not available");
     if (!undo) {
       // The action has to be one the card offered; an undo may follow the
       // page disappearing (the task was completed).
@@ -84,17 +85,12 @@ export const act = mutation({
       await ctx.db.delete(old._id);
     }
 
-    if (integration.kind === "habitica") {
-      const direction = scoreDirection(actionId, undo);
-      if (direction === null || !/^[0-9a-f-]{36}$/i.test(pageId))
-        throw new Error("Action not available");
-      await ctx.scheduler.runAfter(0, internal.habitica.score, {
-        integrationId: integration._id,
-        taskId: pageId,
-        direction,
-      });
-      return;
-    }
-    throw new Error("Action not available");
+    // The integration's kind does the work (kinds/), then refreshes the card.
+    await ctx.scheduler.runAfter(0, internal.integrations.runAct, {
+      integrationId: integration._id,
+      pageId,
+      actionId,
+      undo,
+    });
   },
 });

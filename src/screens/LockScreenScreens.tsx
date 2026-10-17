@@ -87,7 +87,7 @@ export function AddIntegrationScreen() {
 
 export function AddWeatherScreen({ accountNumber }: { accountNumber: string }) {
   const searchPlaces = useAction(api.integrations.searchPlaces);
-  const addWeather = useMutation(api.integrations.addWeather);
+  const addIntegration = useAction(api.integrations.add);
   const [search, setSearch] = useState("");
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [units, setUnits] = useState<Units>("celsius");
@@ -106,12 +106,15 @@ export function AddWeatherScreen({ accountNumber }: { accountNumber: string }) {
   async function add(place: Place) {
     setError(null);
     try {
-      await addWeather({
+      await addIntegration({
         accountNumber,
-        label: `Weather · ${place.name}`.slice(0, 40),
-        latitude: place.latitude,
-        longitude: place.longitude,
-        units,
+        kind: "weather",
+        settings: {
+          place: place.name.slice(0, 30),
+          latitude: place.latitude,
+          longitude: place.longitude,
+          units,
+        },
       });
       navigate("/lockscreen");
     } catch (caught) {
@@ -178,7 +181,7 @@ export function AddWeatherScreen({ accountNumber }: { accountNumber: string }) {
 }
 
 export function AddHabiticaScreen({ accountNumber }: { accountNumber: string }) {
-  const addHabitica = useAction(api.habitica.add);
+  const addIntegration = useAction(api.integrations.add);
   const [userId, setUserId] = useState("");
   const [apiToken, setApiToken] = useState("");
   const [show, setShow] = useState<HabiticaShow>("dailies");
@@ -190,7 +193,11 @@ export function AddHabiticaScreen({ accountNumber }: { accountNumber: string }) 
     setError(null);
     setSubmitting(true);
     try {
-      const integrationId = await addHabitica({ accountNumber, userId, apiToken, show });
+      const integrationId = await addIntegration({
+        accountNumber,
+        kind: "habitica",
+        settings: { userId, apiToken, show },
+      });
       navigate(`/lockscreen/i/${integrationId}`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "";
@@ -264,7 +271,7 @@ export function AddHabiticaScreen({ accountNumber }: { accountNumber: string }) 
 }
 
 export function AddWebhookScreen({ accountNumber }: { accountNumber: string }) {
-  const addWebhook = useAction(api.integrations.addWebhook);
+  const addIntegration = useAction(api.integrations.add);
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -272,7 +279,11 @@ export function AddWebhookScreen({ accountNumber }: { accountNumber: string }) {
     event.preventDefault();
     setError(null);
     try {
-      const integrationId = await addWebhook({ accountNumber, label });
+      const integrationId = await addIntegration({
+        accountNumber,
+        kind: "webhook",
+        settings: { name: label },
+      });
       navigate(`/lockscreen/i/${integrationId}`);
     } catch (caught) {
       setError(
@@ -318,9 +329,9 @@ export function IntegrationScreen({
   const integrations = useQuery(api.integrations.list, { accountNumber });
   const remove = useMutation(api.integrations.remove);
   const move = useMutation(api.integrations.move);
-  const setWeatherUnits = useMutation(api.integrations.setWeatherUnits);
-  const setHabiticaShow = useMutation(api.habitica.setShow);
-  const rotateWebhook = useAction(api.integrations.rotateWebhook);
+  const update = useMutation(api.integrations.update);
+  const setNotify = useMutation(api.integrations.setNotify);
+  const rotateToken = useAction(api.integrations.rotateToken);
   const [error, setError] = useState<string | null>(null);
 
   if (integrations == null) {
@@ -367,14 +378,14 @@ export function IntegrationScreen({
             <select
               className="field"
               aria-label="Show"
-              value={integration.show}
+              value={integration.settings.show as HabiticaShow}
               onChange={(event) =>
                 run(
                   () =>
-                    setHabiticaShow({
+                    update({
                       accountNumber,
                       integrationId: id,
-                      show: event.target.value as HabiticaShow,
+                      settings: { show: event.target.value as HabiticaShow },
                     }),
                   "Unable to change what it shows.",
                 )
@@ -397,14 +408,14 @@ export function IntegrationScreen({
           <select
             className="field"
             aria-label="Units"
-            value={integration.units}
+            value={integration.settings.units as Units}
             onChange={(event) =>
               run(
                 () =>
-                  setWeatherUnits({
+                  update({
                     accountNumber,
                     integrationId: id,
-                    units: event.target.value as Units,
+                    settings: { units: event.target.value as Units },
                   }),
                 "Unable to change the units.",
               )
@@ -445,7 +456,7 @@ export function IntegrationScreen({
               className="button button-secondary"
               onClick={() =>
                 run(
-                  () => rotateWebhook({ accountNumber, integrationId: id }),
+                  () => rotateToken({ accountNumber, integrationId: id }),
                   "Unable to change the address.",
                 )
               }
@@ -453,6 +464,20 @@ export function IntegrationScreen({
               Change address
             </button>
           </>
+        )}
+
+        {(integration.kind === "habitica" || integration.kind === "webhook") && (
+          <button
+            className="button button-secondary"
+            onClick={() =>
+              run(
+                () => setNotify({ accountNumber, integrationId: id, notify: !integration.notify }),
+                "Unable to change notifications.",
+              )
+            }
+          >
+            Phone notifications: {integration.notify ? "On" : "Off"}
+          </button>
         )}
 
         <div className="button-row">

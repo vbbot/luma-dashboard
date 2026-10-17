@@ -34,7 +34,7 @@ server {
 
     # Lock screen webhooks (convex/http.ts), served by the backend's HTTP
     # action port. Nothing else on that port is exposed.
-    location ~ ^/hooks/(habitica/)?[A-Za-z0-9_-]+$ {
+    location ~ ^/hooks/([a-z]+/)?[A-Za-z0-9_-]+$ {
         limit_except POST DELETE {
             deny all;
         }

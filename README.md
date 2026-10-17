@@ -170,8 +170,15 @@ When the dashboard has an `https://` `PUBLIC_URL`, it registers a Habitica webho
 `/hooks/habitica/<token>` and removes it again with the integration; without one, changes made in
 Habitica show up at the next 15-minute refresh.
 
-New integrations are added in `convex/integrations.ts`: store their settings on the
-`integrations` row and write their card with `setCard`. Luma needs no change. Integrations
+Each integration is a *kind* in [`convex/kinds/`](convex/kinds): an object implementing
+`IntegrationKind` ([`types.ts`](convex/kinds/types.ts)) with its settings validation, secret fields,
+label and any of `refresh`, `act` (lock screen long-press), `inbound` (provider webhooks at
+`/hooks/<kind>/<token>`), `onAdd` and `onRemove`. The shared machinery in
+[`convex/integrations.ts`](convex/integrations.ts) does the rest for every kind: encrypting secret
+settings, scheduling refreshes with backoff, validating and storing cards, the per-integration
+notification switch, running actions and routing webhooks. Adding an integration means writing a
+kind file and registering it in `kinds/index.ts`; Luma needs no change. Cards can carry phone
+notifications (see the spec), which Habitica uses for task reminders. Integrations
 that fetch user-supplied URLs are deliberately not included: anyone can create an account, so
 they would let strangers make the server request arbitrary addresses, including ones on its own
 network.

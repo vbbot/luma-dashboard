@@ -24,6 +24,25 @@ export type Page = {
   open?: OpenTarget;
 };
 
+// Something for the phone to show as a notification at `at`, e.g. a
+// reminder. Luma schedules these itself (so they fire offline), replaces one
+// with the same id, and cancels any a newer card no longer lists.
+export type CardNotification = {
+  id: string;
+  at: number;
+  title: string;
+  text?: string;
+  // Tapping it opens the lock screen on this page of the card.
+  pageId?: string;
+  // Remove it from the notification list after this.
+  until?: number;
+  // At `at`, the phone fetches the card and notifies only if it still lists
+  // this notification (e.g. the task is not done yet); if it cannot reach the
+  // server, it notifies anyway. Integrations keep listing a notification a
+  // little past `at` for this.
+  checkFirst?: boolean;
+};
+
 export type Card = {
   id: string;
   schema: number;
@@ -36,6 +55,7 @@ export type Card = {
   relevantUntil?: number;
   paging?: { start?: string; resetOnWake?: boolean; total?: number };
   pages: Page[];
+  notifications?: CardNotification[];
 };
 
 // What an integration produces; the server fills in the rest.
@@ -51,6 +71,9 @@ export const LIMITS = {
   blocks: 3,
   id: 64,
   progressMax: 1000,
+  notifications: 20,
+  // How far ahead a notification may be scheduled.
+  notificationHorizonMs: 48 * 60 * 60_000,
 };
 
 export class CardError extends Error {}
@@ -189,9 +212,33 @@ function page(value: unknown, path: string, allowActions: boolean): Page {
 
 // Checks content from an integration or a webhook and returns a clean copy
 // with only known fields. Throws CardError with a readable path on failure.
+function notification(
+  value: unknown,
+  path: string,
+  pageIds: Set<string>,
+  now: number,
+): CardNotification {
+  if (!isRecord(value)) fail(path, "must be an object");
+  const at = number(value.at, `${path}.at`)!;
+  if (at > now + LIMITS.notificationHorizonMs) fail(`${path}.at`, "must be within 48 hours");
+  const pageId = value.pageId === undefined ? undefined : id(value.pageId, `${path}.pageId`);
+  if (pageId !== undefined && !pageIds.has(pageId)) fail(`${path}.pageId`, "must be a page id");
+  const until = number(value.until, `${path}.until`, { optional: true });
+  if (until !== undefined && until <= at) fail(`${path}.until`, "must be after at");
+  return {
+    id: id(value.id, `${path}.id`),
+    at,
+    title: line(value.title, `${path}.title`, LIMITS.line)!,
+    text: line(value.text, `${path}.text`, LIMITS.line, { optional: true }),
+    pageId,
+    until,
+    checkFirst: value.checkFirst === undefined ? undefined : value.checkFirst === true,
+  };
+}
+
 export function validateContent(
   value: unknown,
-  { allowActions }: { allowActions: boolean },
+  { allowActions, now = Date.now() }: { allowActions: boolean; now?: number },
 ): CardContent {
   if (!isRecord(value)) fail("card", "must be an object");
   if (
@@ -224,7 +271,22 @@ export function validateContent(
     };
   }
 
+  let notifications: CardNotification[] | undefined;
+  if (value.notifications !== undefined) {
+    if (!Array.isArray(value.notifications) || value.notifications.length > LIMITS.notifications) {
+      fail("notifications", `must have at most ${LIMITS.notifications} notifications`);
+    }
+    const pageIds = new Set(pages.map((item) => item.id));
+    notifications = value.notifications.map((item, index) =>
+      notification(item, `notifications[${index}]`, pageIds, now),
+    );
+    if (new Set(notifications.map((item) => item.id)).size !== notifications.length) {
+      fail("notifications", "ids must be unique");
+    }
+  }
+
   return {
+    notifications,
     fallback: line(value.fallback, "fallback", LIMITS.line)!,
     title: line(value.title, "title", LIMITS.title, { optional: true }),
     size: oneOf(

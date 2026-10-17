@@ -67,6 +67,12 @@ export default defineSchema({
     kind: v.union(v.literal("weather"), v.literal("webhook"), v.literal("habitica")),
     label: v.string(),
     order: v.number(),
+    // Kind-specific settings (kinds/); secret fields encrypted.
+    settings: v.optional(v.any()),
+    // Phone notifications from this integration's cards; on unless false.
+    notify: v.optional(v.boolean()),
+    // Before kinds/: settings lived in these. Moved into `settings` by
+    // integrations:migrateSettings; kept so existing data still validates.
     weather: v.optional(
       v.object({
         latitude: v.number(),

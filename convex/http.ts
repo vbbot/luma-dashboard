@@ -1,7 +1,8 @@
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
-import { WEBHOOK_DEFAULT_MINUTES, WEBHOOK_TOKEN_PATTERN } from "./integrations";
+import { WEBHOOK_TOKEN_PATTERN } from "./integrations";
+import { WEBHOOK_DEFAULT_MINUTES } from "./kinds/webhook";
 
 // Webhook integrations: POST a line or a card to show it on the lock screen,
 // DELETE to clear it. The public nginx proxy forwards only /hooks/ here.
@@ -41,9 +42,20 @@ async function readBody(request: Request): Promise<{ payload: unknown; minutes: 
   return { payload, minutes };
 }
 
+const KINDS_WITH_HOOKS = ["webhook", "habitica"] as const;
+
+// /hooks/<token> is a generic webhook (its original address);
+// /hooks/<kind>/<token> is for providers such as Habitica.
 const hook = httpAction(async (ctx, request) => {
-  const webhookToken = new URL(request.url).pathname.slice("/hooks/".length);
-  if (!WEBHOOK_TOKEN_PATTERN.test(webhookToken)) return reply(404, "Unknown webhook");
+  const parts = new URL(request.url).pathname.slice("/hooks/".length).split("/");
+  const [kind, webhookToken] = parts.length === 1 ? ["webhook", parts[0]] : parts;
+  if (
+    parts.length > 2 ||
+    !(KINDS_WITH_HOOKS as readonly string[]).includes(kind) ||
+    !WEBHOOK_TOKEN_PATTERN.test(webhookToken)
+  ) {
+    return reply(404, "Unknown webhook");
+  }
 
   let payload: unknown = null;
   let minutes = WEBHOOK_DEFAULT_MINUTES;
@@ -52,7 +64,8 @@ const hook = httpAction(async (ctx, request) => {
     if (typeof body === "string") return reply(400, body);
     ({ payload, minutes } = body);
   }
-  const result = await ctx.runMutation(internal.integrations.pushWebhook, {
+  const result = await ctx.runMutation(internal.integrations.inbound, {
+    kind: kind as (typeof KINDS_WITH_HOOKS)[number],
     webhookToken,
     payload,
     minutes,
@@ -60,17 +73,7 @@ const hook = httpAction(async (ctx, request) => {
   return reply(result.status, result.error);
 });
 
-// Habitica's own webhook: a task changed there. The body is ignored (it is
-// not authenticated); the token says which integration to refresh.
-const habitica = httpAction(async (ctx, request) => {
-  const webhookToken = new URL(request.url).pathname.slice("/hooks/habitica/".length);
-  if (!WEBHOOK_TOKEN_PATTERN.test(webhookToken)) return reply(404, "Unknown webhook");
-  const known = await ctx.runMutation(internal.habitica.notified, { webhookToken });
-  return known ? reply(200, null) : reply(404, "Unknown webhook");
-});
-
 const http = httpRouter();
-http.route({ pathPrefix: "/hooks/habitica/", method: "POST", handler: habitica });
 http.route({ pathPrefix: "/hooks/", method: "POST", handler: hook });
 http.route({ pathPrefix: "/hooks/", method: "DELETE", handler: hook });
 export default http;

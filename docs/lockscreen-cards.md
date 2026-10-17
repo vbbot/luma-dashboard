@@ -37,6 +37,7 @@ type Card = {
     total?: number;        // real count when the pages are capped ("2/37")
   };
   pages: Page[];           // 1-20. One page = no arrows
+  notifications?: Notification[];  // 0-20, see Notifications
 };
 
 type Page = {
@@ -63,6 +64,31 @@ type OpenTarget = { tool: string } | { app: string };   // Luma tool id, or an A
 showing: `clock` → `14:30` (in the phone's time format), `relative` → `in 5 min` / `5 min ago`,
 `countdown` → `5 min` / `Now`; durations over an hour read `1 h 20 min`. Use them for anything that changes with the clock, instead of
 rewriting the card every minute.
+
+## Notifications
+
+```ts
+type Notification = {
+  id: string;          // stable: the same id is an update; an id a newer card no longer lists is cancelled
+  at: number;          // when to fire (epoch ms), at most 48 hours ahead
+  title: string;       // 1-60 chars, e.g. the task
+  text?: string;       // 1-60 chars, e.g. "Habitica daily"
+  pageId?: string;     // a page of this card: tapping opens the lock screen on it
+  until?: number;      // remove it after this
+  checkFirst?: boolean // see below
+};
+```
+
+Luma schedules them itself with Android alarms, so they fire with the screen off and without a
+network, and posts them in one "Integrations" notification channel. With `checkFirst`, Luma fetches
+the card at `at` and only notifies if it still lists that notification (e.g. the task is still
+open); if it cannot reach the server it notifies anyway. Integrations therefore keep listing a
+notification a little past `at` while it applies. Notifications can be turned off per integration
+on the dashboard, which strips them from its cards.
+
+A card only reaches the phone when Luma is connected (the lock screen or Luma's home showing), so
+notifications have to be scheduled ahead: an integration that wants to notify about something that
+just happened reaches the phone at its next wake.
 
 ## Layout
 
