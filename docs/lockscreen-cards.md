@@ -43,7 +43,7 @@ type Page = {
   id: string;              // stable across updates, so Luma keeps its place
   validFrom?: number;      // epoch ms: hidden before / after. Lets a card carry a timeline that
   validUntil?: number;     // Luma steps through on time, offline
-  blocks: Block[];         // 1-3, drawn top to bottom within the card's rows
+  blocks: Block[];         // 1-3; Luma draws as many as the card's rows allow
   primary?: Action;        // long-press (phase 2)
   open?: OpenTarget;       // tap
 };
@@ -61,7 +61,7 @@ type OpenTarget = { tool: string } | { app: string };   // Luma tool id, or an A
 
 `time` blocks are formatted on the phone and refreshed every minute while the lock screen is
 showing: `clock` → `14:30` (in the phone's time format), `relative` → `in 5 min` / `5 min ago`,
-`countdown` → `5 min` / `Now`. Use them for anything that changes with the clock, instead of
+`countdown` → `5 min` / `Now`; durations over an hour read `1 h 20 min`. Use them for anything that changes with the clock, instead of
 rewriting the card every minute.
 
 ## Layout
@@ -69,7 +69,8 @@ rewriting the card every minute.
 Below the clock Luma has **4 rows**. It takes cards in the dashboard's order, with `high`
 relevance cards first, skipping expired cards and cards with no page valid now:
 
-- `regular` takes 2 rows, `compact` 1. A paged card's header is one of its rows.
+- `regular` takes 2 rows, `compact` 1: a regular page draws its first two blocks, a compact page
+  its first. A paged card's header (title and position) is drawn smaller on top. At most 2 cards.
 - A card that no longer fits is drawn as its `fallback` in 1 row, if one row is left.
 - Pages with more than one valid page get `‹ ›` arrows at the screen edges. Arrows wrap around and
   are hidden whenever the lock screen is not interactive.

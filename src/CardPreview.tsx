@@ -26,17 +26,25 @@ export function isShowing(card: Card | null, now = Date.now()): card is Card {
   return card !== null && card.expiresAt > now && validPages(card, now).length > 0;
 }
 
+// Same wording as Luma: "in 5 min", "5 min ago", "1 h 20 min", "Now".
+function duration(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  return minutes % 60 === 0
+    ? `${minutes / 60} h`
+    : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+}
+
 function formatTime(block: Extract<Block, { type: "time" }>, now: number) {
   const minutes = Math.round((block.at - now) / 60_000);
   let text: string;
   if (block.format === "clock") {
     text = new Date(block.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } else if (block.format === "countdown") {
-    text = minutes <= 0 ? "Now" : `${minutes} min`;
-  } else if (Math.abs(minutes) < 1) {
+    text = minutes <= 0 ? "Now" : duration(minutes);
+  } else if (minutes === 0) {
     text = "now";
   } else {
-    text = minutes > 0 ? `in ${minutes} min` : `${-minutes} min ago`;
+    text = minutes > 0 ? `in ${duration(minutes)}` : `${duration(-minutes)} ago`;
   }
   return block.prefix ? `${block.prefix} ${text}` : text;
 }

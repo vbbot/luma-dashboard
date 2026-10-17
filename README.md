@@ -131,9 +131,11 @@ ignore those apps.
 ## Lock screen integrations
 
 **Lock Screen** on the dashboard holds the message shown above the lock screen clock and up to
-five integrations. Luma 2.0.23+ shows the first two that have something to show, one line each,
-under the clock. Each integration produces a *glance*: up to 60 characters with an expiry, so a
-phone that stops getting updates drops old lines by itself.
+five integrations. Each integration produces a *card*: one line, or several pages you step through
+with ‹ › arrows, built from a small set of blocks (text, pairs, progress, live times) that Luma
+draws in its own style. Cards expire, so a phone that stops getting updates drops them by itself.
+Luma shows at most two, in the order chosen on the dashboard. The format, its limits and how
+older Luma builds are handled are in [docs/lockscreen-cards.md](docs/lockscreen-cards.md).
 
 | Integration | Line | Updated |
 |---|---|---|
@@ -141,12 +143,14 @@ phone that stops getting updates drops old lines by itself.
 | Webhook | Whatever is sent to its secret URL | On each request |
 
 Webhooks (`convex/http.ts`) accept plain text, or JSON with an optional lifetime (default an hour,
-up to a week), and `DELETE` clears the line:
+up to a week): one line, several lines to page through, or a full card. `DELETE` clears it:
 
 ```sh
 curl -d "Bins out tonight" https://luma.example.com/hooks/<token>
 curl -H "Content-Type: application/json" \
   -d '{"text": "Parcel arriving", "minutes": 120}' https://luma.example.com/hooks/<token>
+curl -H "Content-Type: application/json" \
+  -d '{"title": "Windows open", "lines": ["Kitchen", "Bedroom"]}' https://luma.example.com/hooks/<token>
 curl -X DELETE https://luma.example.com/hooks/<token>
 ```
 
@@ -155,7 +159,7 @@ secret and use **Change address** on the dashboard if it leaks. nginx only forwa
 `DELETE` with bodies up to 4 KB, and the backend accepts one request every 5 seconds per webhook.
 
 New integrations are added in `convex/integrations.ts`: store their settings on the
-`integrations` row and write their line with `setGlance`. Luma needs no change. Integrations
+`integrations` row and write their card with `setCard`. Luma needs no change. Integrations
 that fetch user-supplied URLs are deliberately not included: anyone can create an account, so
 they would let strangers make the server request arbitrary addresses, including ones on its own
 network.
@@ -271,15 +275,17 @@ returns: { messageId: string; text: string; expiresAt: number /* epoch ms */ } |
 The phone hides the message once `expiresAt` has passed, so the query does not need to check the
 current time.
 
-### `glances:getForDevice`
+### `lockscreen:getForDevice`
 
 ```ts
-args:    { accountNumber: string }
-returns: { glanceId: string; text: string; expiresAt: number /* epoch ms */ }[]
+args:    { accountNumber: string; protocol: number; blocks: string[] }
+returns: Card[]   // docs/lockscreen-cards.md
 ```
 
-The lines from lock screen integrations, in the order chosen on the dashboard. Luma 2.0.23+ drops
-expired ones and shows the first two under the clock. Older versions do not call it.
+The cards from lock screen integrations, in the order chosen on the dashboard. `protocol` and
+`blocks` say what the client can draw; cards that need more come back as their one-line fallback.
+The first integrations build of Luma called `glances:getForDevice`, which still returns each card's
+fallback line.
 
 ### `managedApps:getReleaseVersions`
 
