@@ -47,8 +47,9 @@ export function HelpScreen({ backTo }: { backTo: string }) {
         <h2>Lock Screen</h2>
         <p>
           Show a short message above the clock, for example if the phone is lost, and up to two
-          lines from integrations below it: the weather for a place, or a webhook that anything
-          (Home Assistant, an iOS Shortcut, a script) can send text to. Needs Luma 2.0.23 or later
+          lines from integrations below it: the weather for a place, your Habitica tasks (step through
+          them with the arrows and long-press to complete one), or a webhook that anything (Home
+          Assistant, an iOS Shortcut, a script) can send text to. Needs Luma 2.0.23 or later
           for the integrations.
         </p>
       </article>
@@ -74,8 +75,8 @@ export function PrivacyScreen({ backTo }: { backTo: string }) {
           </li>
           <li>Any lock screen message you send, until you replace or remove it.</li>
           <li>
-            Your lock screen integrations: the place you chose for weather, webhook addresses, and
-            the line each one currently shows.
+            Your lock screen integrations: the place you chose for weather, webhook addresses, your
+            Habitica User ID and API Token (encrypted), and what each one currently shows.
           </li>
         </ul>
         <p>

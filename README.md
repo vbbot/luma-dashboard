@@ -94,6 +94,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 npm install
 npx convex dev        # runs a local backend and redeploys convex/ on save
 npx convex env set ALTCHA_HMAC_KEY "$(openssl rand -hex 32)"   # once, for the login captcha
+npx convex env set INTEGRATIONS_KEY "$(openssl rand -hex 32)"  # once, encrypts integration credentials
 npm run dev           # in another terminal; http://localhost:5173
 ```
 
@@ -141,6 +142,7 @@ older Luma builds are handled are in [docs/lockscreen-cards.md](docs/lockscreen-
 |---|---|---|
 | Weather | `12° Cloudy · 15°/8°` for a chosen place, from [Open-Meteo](https://open-meteo.com) (no key) | Every 30 minutes by `integrations:refreshDue` (cron in `convex/crons.ts`); one request per place and unit, cached for 15 minutes across accounts. The place is sent rounded to about a kilometre. |
 | Webhook | Whatever is sent to its secret URL | On each request |
+| Habitica | Dailies due today, To-Dos, habits, or health/level/gold. Long-press a task to complete it (or `+1` a habit); long-press `✓ Done` to undo | Within seconds of changes in Habitica (its webhook), after every lock screen action, and every 15 minutes |
 
 Webhooks (`convex/http.ts`) accept plain text, or JSON with an optional lifetime (default an hour,
 up to a week): one line, several lines to page through, or a full card. `DELETE` clears it:
@@ -157,6 +159,15 @@ curl -X DELETE https://luma.example.com/hooks/<token>
 The token is 32 random bytes; anyone who has the URL can change the line, so treat it as a
 secret and use **Change address** on the dashboard if it leaks. nginx only forwards `POST` and
 `DELETE` with bodies up to 4 KB, and the backend accepts one request every 5 seconds per webhook.
+
+**Habitica** (`convex/habitica.ts`, card logic in `convex/habiticaCards.ts`) follows Habitica's own
+day: dailies come from its `isDue`, and the card expires when the day resets at your day-start
+hour. A daily whose reminder went off in the last hour comes first and moves the card to the top;
+overdue and due-today To-Dos come first; low health promotes the stats card. Your API Token is
+encrypted with `INTEGRATIONS_KEY` (derived from `INSTANCE_SECRET`) and never leaves the server.
+When the dashboard has an `https://` `PUBLIC_URL`, it registers a Habitica webhook pointing at
+`/hooks/habitica/<token>` and removes it again with the integration; without one, changes made in
+Habitica show up at the next 15-minute refresh.
 
 New integrations are added in `convex/integrations.ts`: store their settings on the
 `integrations` row and write their card with `setCard`. Luma needs no change. Integrations

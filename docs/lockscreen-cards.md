@@ -44,7 +44,7 @@ type Page = {
   validFrom?: number;      // epoch ms: hidden before / after. Lets a card carry a timeline that
   validUntil?: number;     // Luma steps through on time, offline
   blocks: Block[];         // 1-3; Luma draws as many as the card's rows allow
-  primary?: Action;        // long-press (phase 2)
+  primary?: Action;        // long-press
   open?: OpenTarget;       // tap
 };
 
@@ -54,7 +54,7 @@ type Block =
   | { type: "progress"; value: number; max: number; label?: string }  // 0 <= value <= max <= 1000
   | { type: "time"; at: number; format: "clock" | "relative" | "countdown"; prefix?: string };
 
-type Action = { id: string; label: string; pendingText?: string; undo?: boolean };  // phase 2
+type Action = { id: string; label: string; pendingText?: string; undo?: boolean };
 
 type OpenTarget = { tool: string } | { app: string };   // Luma tool id, or an Android package
 ```
@@ -84,7 +84,7 @@ with the right part aligned right; `progress` as `label 2/5` with a thin bar; `t
 |---|---|
 | Tap `‹` / `›` | Previous / next page, with a light haptic |
 | Tap the card | Opens `open`, if set, and dismisses the lock screen |
-| Long-press the card | Runs `primary` (phase 2): shows `pendingText`, calls `lockscreen:act`, and the next update replaces the page. Long-press again within a few seconds to undo, if `undo` |
+| Long-press the card | Runs `primary`: the page shows `pendingText` (with "Long-press to undo" when `undo`) for 4 seconds, even if an update removes the page meanwhile, then the next page. Long-press again in that time to undo. Redraws wait while a finger is down, so updates never cancel a press |
 
 ## Transport
 
@@ -92,8 +92,10 @@ with the right part aligned right; `progress` as `label 2/5` with a thin bar; `t
 is the highest card schema the client understands and `blocks` the block types it draws. For a
 client that understands less, the server rewrites cards to their fallback (one `text` page).
 
-Phase 2: `lockscreen:act({ accountNumber, cardId, pageId, actionId, requestId })`. `requestId` is a
-random id per press, so a retried request never runs twice.
+`lockscreen:act({ accountNumber, cardId, pageId, actionId, undo, requestId })` runs an action.
+The action must be the page's `primary` (an undo may follow the page disappearing); `requestId` is
+random per press, so a retried request never runs twice. The integration does the work and writes
+a new card, which reaches the phone through the subscription.
 
 ## Validation
 
