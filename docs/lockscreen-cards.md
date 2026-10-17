@@ -1,0 +1,115 @@
+# Lock screen cards
+
+How integrations describe what Luma shows under the lock screen clock. Integrations say *what* to
+show using a small, fixed set of blocks; Luma alone decides *how* it looks, so every integration
+renders in the same Light style and new integrations need no Luma change.
+
+The message above the clock is separate and unchanged (`lockscreenMessages:getCurrentForDevice`).
+
+## Rules
+
+1. **Meaning, not layout.** No markup, colours, positions, images or custom gestures.
+2. **Closed, growing set of blocks.** A new block type is added to Luma once and is then available
+   to every integration.
+3. **Graceful degradation.** Every card has a `fallback` line. Luma skips blocks it does not know;
+   if a page has nothing it can draw, it shows the fallback. Old clients never break on new content.
+4. **Luma owns gestures.** Integrations declare a primary action and an open target; Luma maps them
+   to long-press and tap the same way everywhere.
+5. **One model for every source.** Server integrations and (future) phone-side providers produce
+   the same cards.
+
+## Card
+
+```ts
+type Card = {
+  id: string;              // integration id; stable
+  schema: 1;
+  updatedAt: number;       // epoch ms
+  expiresAt: number;       // Luma hides the card after this
+  fallback: string;        // one line, 1-60 chars. Shown by old clients and when a card does not fit
+  title?: string;          // 1-30 chars. Header of a paged card, with the position ("Dailies 2/5")
+  size: "compact" | "regular";   // preferred height: 1 or 2 rows
+  relevance?: "normal" | "high"; // "high" moves the card ahead of the others until relevantUntil
+  relevantUntil?: number;
+  paging?: {
+    start?: string;        // page id to open on; default the first page
+    resetOnWake?: boolean; // default true: every wake starts at `start`
+    total?: number;        // real count when the pages are capped ("2/37")
+  };
+  pages: Page[];           // 1-20. One page = no arrows
+};
+
+type Page = {
+  id: string;              // stable across updates, so Luma keeps its place
+  validFrom?: number;      // epoch ms: hidden before / after. Lets a card carry a timeline that
+  validUntil?: number;     // Luma steps through on time, offline
+  blocks: Block[];         // 1-3, drawn top to bottom within the card's rows
+  primary?: Action;        // long-press (phase 2)
+  open?: OpenTarget;       // tap
+};
+
+type Block =
+  | { type: "text"; text: string; role?: "primary" | "secondary" }   // 1-60 chars
+  | { type: "pair"; left: string; right: string }                     // left 1-40, right 0-20 chars
+  | { type: "progress"; value: number; max: number; label?: string }  // 0 <= value <= max <= 1000
+  | { type: "time"; at: number; format: "clock" | "relative" | "countdown"; prefix?: string };
+
+type Action = { id: string; label: string; pendingText?: string; undo?: boolean };  // phase 2
+
+type OpenTarget = { tool: string } | { app: string };   // Luma tool id, or an Android package
+```
+
+`time` blocks are formatted on the phone and refreshed every minute while the lock screen is
+showing: `clock` → `14:30` (in the phone's time format), `relative` → `in 5 min` / `5 min ago`,
+`countdown` → `5 min` / `Now`. Use them for anything that changes with the clock, instead of
+rewriting the card every minute.
+
+## Layout
+
+Below the clock Luma has **4 rows**. It takes cards in the dashboard's order, with `high`
+relevance cards first, skipping expired cards and cards with no page valid now:
+
+- `regular` takes 2 rows, `compact` 1. A paged card's header is one of its rows.
+- A card that no longer fits is drawn as its `fallback` in 1 row, if one row is left.
+- Pages with more than one valid page get `‹ ›` arrows at the screen edges. Arrows wrap around and
+  are hidden whenever the lock screen is not interactive.
+
+Blocks draw as: `text` primary at the regular size, secondary smaller and dimmer; `pair` as one row
+with the right part aligned right; `progress` as `label 2/5` with a thin bar; `time` as text.
+
+## Gestures
+
+| Gesture | Effect |
+|---|---|
+| Tap `‹` / `›` | Previous / next page, with a light haptic |
+| Tap the card | Opens `open`, if set, and dismisses the lock screen |
+| Long-press the card | Runs `primary` (phase 2): shows `pendingText`, calls `lockscreen:act`, and the next update replaces the page. Long-press again within a few seconds to undo, if `undo` |
+
+## Transport
+
+`lockscreen:getForDevice({ accountNumber, protocol, blocks })` returns `Card[]` in order. `protocol`
+is the highest card schema the client understands and `blocks` the block types it draws. For a
+client that understands less, the server rewrites cards to their fallback (one `text` page).
+
+Phase 2: `lockscreen:act({ accountNumber, cardId, pageId, actionId, requestId })`. `requestId` is a
+random id per press, so a retried request never runs twice.
+
+## Validation
+
+The server validates every card before storing it: the limits above, no control characters, unique
+page ids, `0 <= value <= max`. A card that fails is not stored and the integration records the
+error, which the dashboard shows. Luma validates again and drops anything it cannot draw.
+
+## Webhooks
+
+`POST /hooks/<token>` accepts any of:
+
+```jsonc
+"plain text"                                          // one line for an hour
+{ "text": "Bins out tonight", "minutes": 120 }        // one line
+{ "title": "Windows open", "lines": ["Kitchen", "Bedroom"], "minutes": 30 }   // one page per line
+{ "card": { /* Card without id/schema/updatedAt/expiresAt */ }, "minutes": 30 }
+```
+
+Webhook cards may set `open` but not `primary`: an action would need the server to call back to an
+address the sender chose.

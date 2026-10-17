@@ -21,22 +21,30 @@ import {
   parseForecast,
   parsePlaces,
 } from "./weather";
+import {
+  CARD_SCHEMA,
+  CardError,
+  type Card,
+  type CardContent,
+  LIMITS,
+  textContent,
+  validateContent,
+} from "./cards";
 
-// Lock screen integrations. Each one produces a glance: one short line of
-// text that Luma shows under the lock screen clock (see glances.ts).
+// Lock screen integrations. Each one produces a card that Luma shows under
+// the lock screen clock (format: docs/lockscreen-cards.md, cards.ts).
 //
 //   weather  Refreshed here every WEATHER_REFRESH_MS from Open-Meteo.
-//   webhook  Anything can POST a line to its secret URL (see http.ts).
+//   webhook  Anything can POST a line or a card to its secret URL (http.ts).
 
 export const MAX_INTEGRATIONS = 5;
-export const MAX_GLANCE_LENGTH = 60;
 export const MAX_LABEL_LENGTH = 40;
 
 const WEATHER_REFRESH_MS = 30 * 60_000;
 const WEATHER_CACHE_MS = 15 * 60_000;
 // Long enough to ride out a few failed refreshes, short enough that old
 // weather does not linger.
-const WEATHER_GLANCE_TTL_MS = 3 * 60 * 60_000;
+const WEATHER_CARD_TTL_MS = 3 * 60 * 60_000;
 const MAX_BACKOFF_MS = 6 * 60 * 60_000;
 
 export const WEBHOOK_DEFAULT_MINUTES = 60;
@@ -73,13 +81,35 @@ function cleanLabel(label: string) {
   return trimmed;
 }
 
-// Line breaks and runs of spaces collapse; Luma shows a single line.
-export function cleanGlanceText(text: string) {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (cleaned === "" || cleaned.length > MAX_GLANCE_LENGTH) {
-    throw new Error(`Text must be 1-${MAX_GLANCE_LENGTH} characters`);
+// What a webhook was sent (see http.ts), as card content. Webhook cards
+// cannot carry actions: those would make the server call back to an address
+// the sender chose.
+export function webhookContent(payload: unknown): CardContent {
+  if (typeof payload === "string")
+    return validateContent(textContent(payload), { allowActions: false });
+  const body = (payload ?? {}) as Record<string, unknown>;
+  if (body.card !== undefined) return validateContent(body.card, { allowActions: false });
+  if (body.lines !== undefined) {
+    if (!Array.isArray(body.lines) || body.lines.length === 0 || body.lines.length > LIMITS.pages) {
+      throw new CardError(`lines: must have 1-${LIMITS.pages} lines`);
+    }
+    const lines = body.lines.map((text, index) => {
+      if (typeof text !== "string") throw new CardError(`lines[${index}]: must be a string`);
+      return text;
+    });
+    const title = typeof body.title === "string" ? body.title : undefined;
+    return validateContent(
+      {
+        title,
+        fallback: lines.length === 1 ? lines[0] : `${title ?? "Lines"}: ${lines.length}`,
+        size: lines.length > 1 ? "regular" : "compact",
+        pages: lines.map((text, index) => ({ id: `${index}`, blocks: [{ type: "text", text }] })),
+      },
+      { allowActions: false },
+    );
   }
-  return cleaned;
+  if (typeof body.text !== "string") throw new CardError(`text, lines or card is required`);
+  return validateContent(textContent(body.text), { allowActions: false });
 }
 
 async function insertIntegration(
@@ -98,36 +128,40 @@ async function insertIntegration(
   return await ctx.db.insert("integrations", { accountId: account._id, order, ...fields });
 }
 
-export async function setGlance(
+// Stores what an integration currently shows, or clears it. Content is
+// validated again here so a faulty integration can never store a card that
+// breaks the phone.
+export async function setCard(
   ctx: MutationCtx,
   integration: Doc<"integrations">,
-  text: string | null,
+  content: CardContent | null,
   expiresAt: number,
 ) {
   const existing = await ctx.db
-    .query("glances")
+    .query("cards")
     .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
     .unique();
-  if (text === null) {
+  if (content === null) {
     if (existing) await ctx.db.delete(existing._id);
     return;
   }
-  const fields = {
-    integrationId: integration._id,
-    accountId: integration.accountId,
-    text,
+  const card: Card = {
+    ...validateContent(content, { allowActions: integration.kind !== "webhook" }),
+    id: integration._id,
+    schema: CARD_SCHEMA,
     updatedAt: Date.now(),
     expiresAt,
   };
+  const fields = { integrationId: integration._id, accountId: integration.accountId, card };
   if (existing) {
     await ctx.db.replace(existing._id, fields);
   } else {
-    await ctx.db.insert("glances", fields);
+    await ctx.db.insert("cards", fields);
   }
 }
 
 export async function deleteIntegration(ctx: MutationCtx, integration: Doc<"integrations">) {
-  await setGlance(ctx, integration, null, 0);
+  await setCard(ctx, integration, null, 0);
   await ctx.db.delete(integration._id);
 }
 
@@ -156,14 +190,14 @@ export const list = query({
       .query("integrations")
       .withIndex("by_account", (q) => q.eq("accountId", account._id))
       .collect();
-    const glances = await ctx.db
-      .query("glances")
+    const cards = await ctx.db
+      .query("cards")
       .withIndex("by_account", (q) => q.eq("accountId", account._id))
       .collect();
     return integrations
       .sort((a, b) => a.order - b.order)
       .map((integration) => {
-        const glance = glances.find((row) => row.integrationId === integration._id);
+        const row = cards.find((entry) => entry.integrationId === integration._id);
         return {
           integrationId: integration._id,
           kind: integration.kind,
@@ -171,7 +205,7 @@ export const list = query({
           units: integration.weather?.units,
           webhookToken: integration.webhookToken,
           lastError: integration.lastError,
-          glance: glance ? { text: glance.text, expiresAt: glance.expiresAt } : null,
+          card: row ? (row.card as Card) : null,
         };
       });
   },
@@ -310,8 +344,9 @@ export const replaceWebhookToken = internalMutation({
 
 // Called by http.ts. Returns an HTTP status for the caller.
 export const pushWebhook = internalMutation({
-  args: { webhookToken: v.string(), text: v.union(v.string(), v.null()), minutes: v.number() },
-  handler: async (ctx, { webhookToken, text, minutes }) => {
+  // payload: the request body (string or parsed JSON); null clears the card.
+  args: { webhookToken: v.string(), payload: v.any(), minutes: v.number() },
+  handler: async (ctx, { webhookToken, payload, minutes }) => {
     const integration = await ctx.db
       .query("integrations")
       .withIndex("by_webhookToken", (q) => q.eq("webhookToken", webhookToken))
@@ -324,19 +359,20 @@ export const pushWebhook = internalMutation({
     ) {
       return { status: 429, error: "Too many requests; wait a few seconds" };
     }
-    let cleaned: string | null = null;
-    if (text !== null) {
+    let content: CardContent | null = null;
+    if (payload !== null) {
       try {
-        cleaned = cleanGlanceText(text);
+        content = webhookContent(payload);
       } catch (error) {
-        return { status: 400, error: (error as Error).message };
+        if (error instanceof CardError) return { status: 400, error: error.message };
+        throw error;
       }
     }
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > WEBHOOK_MAX_MINUTES) {
       return { status: 400, error: `minutes must be 1-${WEBHOOK_MAX_MINUTES}` };
     }
     await ctx.db.patch(integration._id, { lastPushAt: now });
-    await setGlance(ctx, integration, cleaned, now + minutes * 60_000);
+    await setCard(ctx, integration, content, now + minutes * 60_000);
     return { status: 200, error: null };
   },
 });
@@ -469,7 +505,7 @@ export const saveWeather = internalMutation({
           failures: 0,
           lastError: undefined,
         });
-        await setGlance(ctx, integration, update.text, now + WEATHER_GLANCE_TTL_MS);
+        await setCard(ctx, integration, textContent(update.text), now + WEATHER_CARD_TTL_MS);
       } else {
         const failures = update.failures + 1;
         await ctx.db.patch(integration._id, {
@@ -479,5 +515,22 @@ export const saveWeather = internalMutation({
         });
       }
     }
+  },
+});
+
+// Existing deployments stored one-line glances before cards existed. Run at
+// backend start (docker/backend/entrypoint.sh); a no-op once they are gone.
+export const migrateGlances = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const glances = await ctx.db.query("glances").take(500);
+    for (const glance of glances) {
+      const integration = await ctx.db.get(glance.integrationId);
+      if (integration !== null && glance.expiresAt > Date.now()) {
+        await setCard(ctx, integration, textContent(glance.text), glance.expiresAt);
+      }
+      await ctx.db.delete(glance._id);
+    }
+    return glances.length;
   },
 });

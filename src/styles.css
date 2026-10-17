@@ -328,6 +328,92 @@ button {
   letter-spacing: normal;
 }
 
+/* Lock screen card preview: mirrors Luma's renderer. */
+.card-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1.4rem 1rem;
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.card-empty {
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.card-blocks {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.card-primary,
+.card-secondary {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-primary {
+  font-size: 1.5rem;
+}
+
+.card-secondary {
+  color: #bbbbbb;
+  font-size: 1.15rem;
+}
+
+.card-pair {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  width: min(100%, 22rem);
+}
+
+.card-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.card-progress-track {
+  position: relative;
+  width: 8rem;
+  height: 2px;
+  background: var(--border);
+}
+
+.card-progress-track span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--fg);
+}
+
+.card-arrow {
+  flex: 0 0 3rem;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font-size: 2.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .code-block {
   margin: 0;
   padding: 1rem;

@@ -4,6 +4,8 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { navigate } from "../router";
 import { CopyIcon, Loading, MenuLink, PlusCircleIcon, Screen } from "../ui";
+import { CardPreview, isShowing } from "../CardPreview";
+import type { Card } from "../../convex/cards";
 
 type Units = "celsius" | "fahrenheit";
 type Place = { name: string; detail: string; latitude: number; longitude: number };
@@ -17,8 +19,8 @@ function webhookUrl(token: string) {
   return `${window.location.origin}/hooks/${token}`;
 }
 
-function glanceSummary(glance: { text: string; expiresAt: number } | null) {
-  return glance !== null && glance.expiresAt > Date.now() ? glance.text : "Nothing to show";
+function cardSummary(card: Card | null) {
+  return isShowing(card) ? card.fallback : "Nothing to show";
 }
 
 // Everything Luma shows on the lock screen: the message above the clock and
@@ -48,7 +50,7 @@ export function LockScreenScreen({ accountNumber }: { accountNumber: string }) {
                 href={`#/lockscreen/i/${integration.integrationId}`}
               >
                 <span className="store-app-name">{integration.label}</span>
-                <span className="store-app-sources">{glanceSummary(integration.glance)}</span>
+                <span className="store-app-sources">{cardSummary(integration.card)}</span>
               </a>
             ))}
             <p className="muted store-summary">
@@ -242,10 +244,7 @@ export function IntegrationScreen({
     );
   }
   const id = integration.integrationId as Id<"integrations">;
-  const glance =
-    integration.glance !== null && integration.glance.expiresAt > Date.now()
-      ? integration.glance
-      : null;
+  const card = isShowing(integration.card) ? integration.card : null;
 
   async function run(task: () => Promise<unknown>, failure: string) {
     setError(null);
@@ -259,9 +258,9 @@ export function IntegrationScreen({
   return (
     <Screen title={integration.label} backTo="/lockscreen" centered>
       <div className="form">
-        <p className="message-preview">{glance?.text ?? "Nothing to show"}</p>
-        {glance !== null && (
-          <p className="muted">Showing until {new Date(glance.expiresAt).toLocaleString()}</p>
+        <CardPreview card={integration.card} />
+        {card !== null && (
+          <p className="muted">Showing until {new Date(card.expiresAt).toLocaleString()}</p>
         )}
         {integration.lastError !== undefined && (
           <p className="muted">Last update failed: {integration.lastError}</p>
@@ -307,9 +306,12 @@ export function IntegrationScreen({
               </button>
             </div>
             <p className="muted">
-              POST up to 60 characters of text to show them for an hour, or JSON such as{" "}
-              <code>{'{"text": "Bins out tonight", "minutes": 120}'}</code> (up to a week). DELETE
-              clears the line. Anyone with the address can change the line, so keep it private.
+              POST up to 60 characters of text to show them for an hour. Or POST JSON: one line with{" "}
+              <code>{'{"text": "Bins out tonight", "minutes": 120}'}</code> (up to a week), several
+              to page through with{" "}
+              <code>{'{"title": "Windows open", "lines": ["Kitchen", "Bedroom"]}'}</code>, or a full
+              card (see the README). DELETE clears it. Anyone with the address can change what it
+              shows, so keep it private.
             </p>
             <pre className="code-block">{`curl -d "Bins out tonight" ${webhookUrl(integration.webhookToken)}`}</pre>
             <button

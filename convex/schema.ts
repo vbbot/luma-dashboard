@@ -85,7 +85,18 @@ export default defineSchema({
     .index("by_webhookToken", ["webhookToken"])
     .index("by_nextRunAt", ["nextRunAt"]),
 
-  // The line each integration currently shows. One per integration.
+  // What each integration currently shows. One per integration; `card` is
+  // validated by cards.ts (format: docs/lockscreen-cards.md).
+  cards: defineTable({
+    integrationId: v.id("integrations"),
+    accountId: v.id("accounts"),
+    card: v.any(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_integration", ["integrationId"]),
+
+  // Before cards: one line per integration. Emptied by
+  // integrations:migrateGlances; kept so existing deployments still validate.
   glances: defineTable({
     integrationId: v.id("integrations"),
     accountId: v.id("accounts"),

@@ -53,6 +53,9 @@ else
   convex env remove GITHUB_TOKEN >/dev/null 2>&1 || true
 fi
 
+# Lock screen lines stored before cards existed.
+convex run integrations:migrateGlances >/dev/null || echo "Could not migrate lock screen lines" >&2
+
 # Fill the App Store now rather than at the first scheduled refresh.
 (convex run appStore:refresh >/dev/null && echo "App Store refreshed" || echo "App Store refresh failed" >&2) &
 
