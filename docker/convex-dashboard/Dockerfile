@@ -13,6 +13,8 @@ RUN set -eu; \
     rm /tmp/dashboard.zip; \
     apk del curl unzip
 
-# host:port of the backend as seen from this container.
-ENV BACKEND_UPSTREAM=backend:3210
+# host:port of the backend as seen from this container, looked up per request
+# with the container's DNS servers.
+ENV BACKEND_UPSTREAM=backend:3210 \
+    NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template

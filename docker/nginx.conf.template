@@ -10,12 +10,18 @@ map $http_upgrade $connection_upgrade {
 
 server {
     listen 80;
+    # Look the backend up per request rather than once at startup, so nginx
+    # starts before the backend's name resolves and follows it when its
+    # address changes (e.g. after a redeploy).
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+    set $backend_upstream ${BACKEND_UPSTREAM};
+    set $site_upstream ${SITE_UPSTREAM};
     server_name _;
     root /usr/share/nginx/html;
 
     # /api/sync (Luma's Android client) and /api/<version>/sync (JS client).
     location ~ ^/api/([^/]+/)?sync$ {
-        proxy_pass http://${BACKEND_UPSTREAM};
+        proxy_pass http://$backend_upstream;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -39,14 +45,14 @@ server {
             deny all;
         }
         client_max_body_size 4k;
-        proxy_pass http://${SITE_UPSTREAM};
+        proxy_pass http://$site_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location = /version {
-        proxy_pass http://${BACKEND_UPSTREAM};
+        proxy_pass http://$backend_upstream;
     }
 
     location /assets/ {

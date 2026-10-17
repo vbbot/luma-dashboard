@@ -15,9 +15,11 @@ RUN npm run build
 
 FROM nginx:1.27-alpine AS web
 # host:port of the backend API and its HTTP actions, as seen from this
-# container.
+# container. NGINX_ENTRYPOINT_LOCAL_RESOLVERS gives nginx the container's DNS
+# servers, for looking the backend up per request.
 ENV BACKEND_UPSTREAM=backend:3210 \
-    SITE_UPSTREAM=backend:3211
+    SITE_UPSTREAM=backend:3211 \
+    NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/entrypoint.sh /docker-entrypoint.d/40-luma-config.sh
 RUN chmod +x /docker-entrypoint.d/40-luma-config.sh
