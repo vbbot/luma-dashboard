@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { androidApp, installedManagedApp } from "./schema";
 import { captchaPayload, requireCaptcha } from "./captcha";
@@ -167,11 +167,43 @@ export const syncInstalledApps = mutation({
         ...fields,
       });
     } else {
+      // An enabled app that was installed and no longer is was uninstalled on
+      // the phone (for example from Android's settings), so stop offering it.
+      const nowInstalled = new Set(args.installedManagedApps.map((app) => app.appId));
+      const uninstalled = device.installedManagedApps
+        .map((app) => app.appId)
+        .filter((appId) => !nowInstalled.has(appId));
+      await removeEnabledApps(ctx, account, uninstalled);
       await ctx.db.patch(device._id, fields);
     }
     return null;
   },
 });
+
+// Called when an app is removed from Luma's Manage Tools before it was
+// installed. Installed apps are uninstalled on the phone and picked up by
+// syncInstalledApps instead.
+export const removeApp = mutation({
+  args: { accountNumber: v.string(), appId: v.string() },
+  handler: async (ctx, { accountNumber, appId }) => {
+    const account = await findAccount(ctx, accountNumber);
+    if (account !== null) {
+      await removeEnabledApps(ctx, account, [appId]);
+    }
+    return null;
+  },
+});
+
+async function removeEnabledApps(ctx: MutationCtx, account: Doc<"accounts">, appIds: string[]) {
+  const remove = new Set(appIds.filter((appId) => account.enabledAppIds.includes(appId)));
+  if (remove.size === 0) return;
+  const requestedAppUpdateVersions = { ...account.requestedAppUpdateVersions };
+  for (const appId of remove) delete requestedAppUpdateVersions[appId];
+  await ctx.db.patch(account._id, {
+    enabledAppIds: account.enabledAppIds.filter((appId) => !remove.has(appId)),
+    requestedAppUpdateVersions,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Called by the web dashboard.

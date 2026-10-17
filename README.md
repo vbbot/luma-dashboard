@@ -216,6 +216,18 @@ returns: anything (ignored)
 `installedAndroidApps` lists launchable apps on the phone, excluding Luma, `com.lightos.*`,
 managed apps, and a fixed list of stock AOSP apps. This feeds the dashboard's **Android** picker.
 
+An enabled app that was in the installation's previous `installedManagedApps` and is missing now
+was uninstalled on the phone, so it is removed from the account.
+
+### `accounts:removeApp`
+
+```ts
+args: { accountNumber: string; appId: string }
+returns: null
+```
+
+Sent by Luma 2.0.22+ when an App Store app that was never installed is removed in Manage Tools.
+
 ### `lockscreenMessages:getCurrentForDevice`
 
 ```ts
