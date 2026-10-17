@@ -1044,3 +1044,32 @@ textarea.input {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.95rem;
 }
+
+.input-number {
+  width: 4.5rem;
+  flex: none;
+  text-align: center;
+}
+
+.day-picker {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.day {
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: #000;
+  color: var(--muted);
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.day-on {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: #000;
+}

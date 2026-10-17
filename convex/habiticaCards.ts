@@ -31,6 +31,13 @@ export type HabiticaTask = {
   date?: string | null;
   // Dailies: the next dates it is due (ISO), from Habitica.
   nextDue?: string[];
+  // Dailies: the schedule (see habiticaTasks.ts DailySchedule).
+  frequency?: string;
+  everyX?: number;
+  repeat?: Partial<Record<"m" | "t" | "w" | "th" | "f" | "s" | "su", boolean>>;
+  daysOfMonth?: number[];
+  weeksOfMonth?: number[];
+  startDate?: string;
   up?: boolean;
   down?: boolean;
   counterUp?: number;

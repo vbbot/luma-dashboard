@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { DashboardTask, TaskType } from "../../convex/habiticaTasks";
+import type { DailySchedule, DashboardTask, TaskType, Weekday } from "../../convex/habiticaTasks";
 import { navigate } from "../router";
 import {
   Chip,
@@ -123,10 +123,178 @@ export function ConnectionsScreen({ accountNumber }: { accountNumber: string }) 
   );
 }
 
+const DAY_LABELS: { day: Weekday; short: string; name: string }[] = [
+  { day: "m", short: "M", name: "Mon" },
+  { day: "t", short: "T", name: "Tue" },
+  { day: "w", short: "W", name: "Wed" },
+  { day: "th", short: "T", name: "Thu" },
+  { day: "f", short: "F", name: "Fri" },
+  { day: "s", short: "S", name: "Sat" },
+  { day: "su", short: "S", name: "Sun" },
+];
+
+const UNIT: Record<DailySchedule["frequency"], string> = {
+  daily: "day",
+  weekly: "week",
+  monthly: "month",
+  yearly: "year",
+};
+
+function ordinal(value: number) {
+  const suffix = value === 1 ? "st" : value === 2 ? "nd" : value === 3 ? "rd" : "th";
+  return `${value}${suffix}`;
+}
+
+function startParts(startDate: string) {
+  const [year, month, day] = startDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return {
+    day,
+    week: Math.ceil(day / 7),
+    weekday: date.toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" }),
+    dayMonth: date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }),
+  };
+}
+
+// "Weekdays", "Every 2 weeks on Mon, Thu", "Monthly on the 3rd Saturday".
+export function scheduleText(schedule: DailySchedule) {
+  const every =
+    schedule.everyX > 1 ? `Every ${schedule.everyX} ${UNIT[schedule.frequency]}s` : null;
+  const start = startParts(schedule.startDate);
+  switch (schedule.frequency) {
+    case "daily":
+      return every ?? "Every day";
+    case "weekly": {
+      const days = DAY_LABELS.filter((entry) => schedule.days.includes(entry.day));
+      const named =
+        days.length === 7
+          ? "every day"
+          : days.map((entry) => entry.day).join() === "m,t,w,th,f"
+            ? "weekdays"
+            : days.map((entry) => entry.day).join() === "s,su"
+              ? "weekends"
+              : days.map((entry) => entry.name).join(", ");
+      return every ? `${every} on ${named}` : named.charAt(0).toUpperCase() + named.slice(1);
+    }
+    case "monthly": {
+      const on =
+        schedule.monthlyBy === "dayOfWeek"
+          ? `the ${ordinal(start.week)} ${start.weekday}`
+          : `day ${start.day}`;
+      return `${every ?? "Monthly"} on ${on}`;
+    }
+    case "yearly":
+      return `${every ?? "Yearly"} on ${start.dayMonth}`;
+  }
+}
+
+function ScheduleEditor({
+  schedule,
+  onChange,
+}: {
+  schedule: DailySchedule;
+  onChange: (schedule: DailySchedule) => void;
+}) {
+  const start = startParts(schedule.startDate);
+  const set = (changes: Partial<DailySchedule>) => onChange({ ...schedule, ...changes });
+  return (
+    <div className="field-stack">
+      <span className="field-label">Repeats</span>
+      <div className="actions">
+        <select
+          className="input input-auto"
+          aria-label="Repeats"
+          value={schedule.frequency}
+          onChange={(event) => set({ frequency: event.target.value as DailySchedule["frequency"] })}
+        >
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+        <span className="hint">every</span>
+        <input
+          className="input input-number"
+          inputMode="numeric"
+          aria-label="Every"
+          value={schedule.everyX}
+          onChange={(event) => {
+            const value = Number(event.target.value.replace(/\D/g, "").slice(0, 4));
+            set({ everyX: value });
+          }}
+        />
+        <span className="hint">
+          {UNIT[schedule.frequency]}
+          {schedule.everyX === 1 ? "" : "s"}
+        </span>
+      </div>
+      {schedule.frequency === "weekly" && (
+        <div className="day-picker" role="group" aria-label="Days of the week">
+          {DAY_LABELS.map((entry) => {
+            const on = schedule.days.includes(entry.day);
+            return (
+              <button
+                key={entry.day}
+                type="button"
+                className={on ? "day day-on" : "day"}
+                aria-pressed={on}
+                aria-label={entry.name}
+                title={entry.name}
+                onClick={() =>
+                  set({
+                    days: on
+                      ? schedule.days.filter((day) => day !== entry.day)
+                      : DAY_LABELS.map((item) => item.day).filter(
+                          (day) => day === entry.day || schedule.days.includes(day),
+                        ),
+                  })
+                }
+              >
+                {entry.short}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {schedule.frequency === "monthly" && (
+        <select
+          className="input"
+          aria-label="Repeats on"
+          value={schedule.monthlyBy}
+          onChange={(event) => set({ monthlyBy: event.target.value as DailySchedule["monthlyBy"] })}
+        >
+          <option value="dayOfMonth">On day {start.day} of the month</option>
+          <option value="dayOfWeek">
+            On the {ordinal(start.week)} {start.weekday} of the month
+          </option>
+        </select>
+      )}
+      {schedule.frequency === "monthly" &&
+        schedule.monthlyBy === "dayOfWeek" &&
+        start.week === 5 && (
+          <p className="hint">
+            Not every month has a 5th {start.weekday}; Habitica skips those months.
+          </p>
+        )}
+      <div className="field-row">
+        <span className="field-label">Starts</span>
+        <input
+          className="input"
+          type="date"
+          aria-label="Start date"
+          value={schedule.startDate}
+          onChange={(event) => event.target.value && set({ startDate: event.target.value })}
+        />
+      </div>
+    </div>
+  );
+}
+
 function taskDetail(task: DashboardTask) {
   const parts: string[] = [];
   if (task.type === "daily") {
     parts.push(task.completed ? "Done today" : task.isDue ? "Due today" : "Not due today");
+    if (task.schedule) parts.push(scheduleText(task.schedule));
   }
   if (task.type === "todo" && task.dueDate) parts.push(`Due ${task.dueDate}`);
   if (task.type === "habit")
@@ -208,6 +376,7 @@ function TaskEditor({
   const [notes, setNotes] = useState(task.notes);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
   const [reminders, setReminders] = useState<Reminder[]>(task.reminders);
+  const [schedule, setSchedule] = useState<DailySchedule | undefined>(task.schedule);
   const [up, setUp] = useState(task.up);
   const [down, setDown] = useState(task.down);
   const [busy, setBusy] = useState(false);
@@ -220,6 +389,7 @@ function TaskEditor({
         notes,
         ...(task.type === "todo" ? { dueDate } : {}),
         ...(task.type === "habit" ? { up, down } : { reminders }),
+        ...(task.type === "daily" && schedule ? { schedule } : {}),
       });
     } finally {
       setBusy(false);
@@ -255,6 +425,9 @@ function TaskEditor({
             onChange={(event) => setDueDate(event.target.value)}
           />
         </div>
+      )}
+      {task.type === "daily" && schedule && (
+        <ScheduleEditor schedule={schedule} onChange={setSchedule} />
       )}
       {task.type === "habit" ? (
         <>

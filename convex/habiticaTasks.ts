@@ -18,6 +18,23 @@ export const MAX_REMINDERS = 5;
 
 export type TaskType = "daily" | "todo" | "habit";
 
+export const WEEKDAYS = ["m", "t", "w", "th", "f", "s", "su"] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
+// A daily's schedule, as the dashboard edits it. Habitica stores it as
+// frequency, everyX, repeat (weekdays), daysOfMonth / weeksOfMonth and
+// startDate, and works out isDue / nextDue from them itself.
+export type DailySchedule = {
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  everyX: number;
+  // Weekly: the days it is due on.
+  days: Weekday[];
+  // Monthly: on the start date's day of the month, or on its weekday in the
+  // same week of the month (e.g. the 3rd Saturday).
+  monthlyBy: "dayOfMonth" | "dayOfWeek";
+  startDate: string;
+};
+
 // What the dashboard shows.
 export type DashboardTask = {
   id: string;
@@ -30,6 +47,8 @@ export type DashboardTask = {
   reminders: { time: string; date?: string }[];
   up: boolean;
   down: boolean;
+  // Dailies only.
+  schedule?: DailySchedule;
 };
 
 // What the dashboard sends for a reminder: dailies a time, To-Dos a date and
@@ -72,8 +91,74 @@ function parseDate(date: unknown) {
   return at;
 }
 
+// Habitica's weekday keys by JavaScript getUTCDay() (0 = Sunday).
+const WEEKDAY_BY_INDEX: Weekday[] = ["su", "m", "t", "w", "th", "f", "s"];
+
+function scheduleOf(task: HabiticaTask, user: HabiticaUser): DailySchedule {
+  const frequency = (["daily", "weekly", "monthly", "yearly"] as const).includes(
+    task.frequency as DailySchedule["frequency"],
+  )
+    ? (task.frequency as DailySchedule["frequency"])
+    : "weekly";
+  const start = task.startDate ? Date.parse(task.startDate) : NaN;
+  return {
+    frequency,
+    everyX: typeof task.everyX === "number" && task.everyX > 0 ? task.everyX : 1,
+    days: WEEKDAYS.filter((day) => task.repeat?.[day] !== false),
+    monthlyBy: (task.weeksOfMonth?.length ?? 0) > 0 ? "dayOfWeek" : "dayOfMonth",
+    startDate: Number.isNaN(start) ? wallParts(Date.now(), user).date : wallParts(start, user).date,
+  };
+}
+
+// The schedule fields for Habitica, from the dashboard's DailySchedule.
+export function habiticaSchedule(input: unknown, user: HabiticaUser) {
+  const schedule = (input ?? {}) as Partial<DailySchedule>;
+  const frequency = schedule.frequency;
+  if (
+    frequency !== "daily" &&
+    frequency !== "weekly" &&
+    frequency !== "monthly" &&
+    frequency !== "yearly"
+  ) {
+    throw new SettingsError("Choose how often it repeats");
+  }
+  const everyX = schedule.everyX;
+  if (typeof everyX !== "number" || !Number.isInteger(everyX) || everyX < 1 || everyX > 9999) {
+    throw new SettingsError("Repeat every 1 to 9999");
+  }
+  const startDay = parseDate(schedule.startDate);
+  const start = new Date(startDay);
+  const repeat = Object.fromEntries(WEEKDAYS.map((day) => [day, true])) as Record<Weekday, boolean>;
+  let daysOfMonth: number[] = [];
+  let weeksOfMonth: number[] = [];
+  if (frequency === "weekly") {
+    const days = Array.isArray(schedule.days) ? schedule.days : [];
+    if (!days.some((day) => (WEEKDAYS as readonly string[]).includes(day))) {
+      throw new SettingsError("Choose at least one day of the week");
+    }
+    for (const day of WEEKDAYS) repeat[day] = days.includes(day);
+  } else if (frequency === "monthly") {
+    if (schedule.monthlyBy === "dayOfWeek") {
+      // The start date's weekday in the same week of the month.
+      weeksOfMonth = [Math.floor((start.getUTCDate() - 1) / 7)];
+      for (const day of WEEKDAYS) repeat[day] = day === WEEKDAY_BY_INDEX[start.getUTCDay()];
+    } else {
+      daysOfMonth = [start.getUTCDate()];
+    }
+  }
+  return {
+    frequency,
+    everyX,
+    repeat,
+    daysOfMonth,
+    weeksOfMonth,
+    startDate: new Date(fromLocal(startDay, user)).toISOString(),
+  };
+}
+
 export function toDashboardTask(task: HabiticaTask, user: HabiticaUser): DashboardTask {
   return {
+    ...(task.type === "daily" ? { schedule: scheduleOf(task, user) } : {}),
     id: task.id,
     type: task.type as TaskType,
     text: task.text,
@@ -156,6 +241,8 @@ export function newTaskBody(input: unknown, user: HabiticaUser, now: number, new
   } else if (body.reminders !== undefined) {
     task.reminders = habiticaReminders(type, body.reminders, user, now, newId);
   }
+  if (type === "daily" && body.schedule !== undefined)
+    Object.assign(task, habiticaSchedule(body.schedule, user));
   return task;
 }
 
@@ -181,6 +268,9 @@ export function taskChanges(type: TaskType, input: unknown, user: HabiticaUser) 
       body.dueDate === "" || body.dueDate === null
         ? null
         : new Date(fromLocal(parseDate(body.dueDate), user)).toISOString();
+  }
+  if (type === "daily" && body.schedule !== undefined) {
+    Object.assign(changes, habiticaSchedule(body.schedule, user));
   }
   if (type === "habit" && (body.up !== undefined || body.down !== undefined)) {
     const up = body.up !== false;
